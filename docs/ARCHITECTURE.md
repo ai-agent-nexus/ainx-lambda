@@ -52,15 +52,15 @@ AINX Lambda 采用 monorepo 架构，基于全球最佳实践设计，支持多�
 
 ## 技术栈
 
-| 技术 | 版本 | 用途 |
-|------|------|------|
-| Node.js | 24.x | Lambda 运行时 |
-| TypeScript | 5.8+ | 开发语言 |
-| esbuild | 0.25+ | 构建工具 |
-| Jest | 29.7+ | 测试框架 |
-| ts-jest | 29.3+ | TypeScript 测试支持 |
-| AWS SAM | 最新 | 基础设施定义 |
-| GitHub Actions | 最新 | CI/CD |
+| 技术           | 版本  | 用途                |
+| -------------- | ----- | ------------------- |
+| Node.js        | 24.x  | Lambda 运行时       |
+| TypeScript     | 5.8+  | 开发语言            |
+| esbuild        | 0.25+ | 构建工具            |
+| Jest           | 29.7+ | 测试框架            |
+| ts-jest        | 29.3+ | TypeScript 测试支持 |
+| AWS SAM        | 最新  | 基础设施定义        |
+| GitHub Actions | 最新  | CI/CD               |
 
 ## 技术选型理由
 
@@ -71,6 +71,7 @@ AINX Lambda 采用 monorepo 架构，基于全球最佳实践设计，支持多�
 - **Nx**: 功能强大但学习曲线陡峭，适合企业级项目
 
 选择 NPM Workspaces 是因为：
+
 - 原生集成，无需额外工具
 - 与 npm cli 无缝配合
 - 足够满足当前需求
@@ -82,6 +83,7 @@ AINX Lambda 采用 monorepo 架构，基于全球最佳实践设计，支持多�
 - **rollup**: 适合库打包
 
 选择 esbuild 是因为：
+
 - 构建速度极快（比 webpack 快 10-100 倍）
 - 原生 TypeScript 支持
 - 输出体积小，适合 Lambda
@@ -93,6 +95,7 @@ AINX Lambda 采用 monorepo 架构，基于全球最佳实践设计，支持多�
 - **CDK**: 编程式定义，适合复杂架构
 
 选择 SAM 是因为：
+
 - AWS 原生支持
 - 与 CloudFormation 集成
 - 本地测试支持
