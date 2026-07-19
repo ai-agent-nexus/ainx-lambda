@@ -166,14 +166,6 @@ npm run test:watch
 - **环境变量**: 敏感信息通过 GitHub Secrets 管理
 - **CORS**: API Gateway 配置跨域支持
 
-## 贡献指南
-
-1. Fork 本仓库
-2. 创建功能分支 (`git checkout -b feature/amazing-feature`)
-3. 提交更改 (`git commit -m 'feat: add amazing feature'`)
-4. 推送分支 (`git push origin feature/amazing-feature`)
-5. 创建 Pull Request
-
 ## 许可证
 
 MIT License - 详见 [LICENSE](LICENSE) 文件
