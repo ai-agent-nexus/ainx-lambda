@@ -33,6 +33,30 @@ export default [
     },
   },
   {
+    files: ['**/*.test.ts', '**/*.test.tsx', '**/*.spec.ts', '**/*.spec.tsx'],
+    languageOptions: {
+      parser: tsParser,
+      parserOptions: {
+        ecmaVersion: 2024,
+        sourceType: 'module',
+      },
+      globals: {
+        node: true,
+        es2024: true,
+        jest: true,
+        describe: true,
+        it: true,
+        test: true,
+        expect: true,
+        beforeEach: true,
+        afterEach: true,
+        beforeAll: true,
+        afterAll: true,
+        console: true,
+      },
+    },
+  },
+  {
     files: ['**/*.js', '**/*.cjs'],
     languageOptions: {
       ecmaVersion: 2024,
