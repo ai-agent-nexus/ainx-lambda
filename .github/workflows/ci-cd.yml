@@ -9,7 +9,7 @@ on:
 
 env:
   NODE_VERSION: '24'
-  AWS_REGION: us-east-1
+  AWS_REGION: ap-southeast-1
 
 jobs:
   # Detect which files changed

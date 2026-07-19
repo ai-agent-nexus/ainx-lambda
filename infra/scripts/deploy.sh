@@ -31,7 +31,7 @@ sam deploy \
   --template-file infra/templates/template.yaml \
   --stack-name "ainx-lambda-$STAGE" \
   --s3-bucket "ainx-lambda-deployments-$STAGE" \
-  --region us-east-1 \
+  --region ap-southeast-1 \
   --parameter-overrides "Stage=$STAGE" \
   --capabilities CAPABILITY_IAM \
   --no-confirm-changeset

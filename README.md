@@ -130,7 +130,7 @@ npm run test:watch
 
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
-- `AWS_REGION` (默认 us-east-1)
+- `AWS_REGION` (默认 ap-southeast-1)
 
 ## 最佳实践
 
