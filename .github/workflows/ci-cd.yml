@@ -87,7 +87,7 @@ jobs:
     if: ${{ needs.detect-changes.outputs.functions == 'true' }}
     strategy:
       matrix:
-        function: [hello-world, user-service]
+        function: [hello-world]
     steps:
       - uses: actions/checkout@v4
       

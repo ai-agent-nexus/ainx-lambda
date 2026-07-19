@@ -57,30 +57,6 @@ Resources:
       Policies:
         - AWSLambdaBasicExecutionRole
 
-  # User Service Lambda
-  UserServiceFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub 'ainx-user-service-${Stage}'
-      Handler: index.handler
-      CodeUri: ../functions/user-service/dist/
-      Description: User service Lambda function
-      Events:
-        UsersApi:
-          Type: Api
-          Properties:
-            Path: /users
-            Method: ANY
-            RestApiId: !Ref ApiGateway
-        UserApi:
-          Type: Api
-          Properties:
-            Path: /users/{proxy+}
-            Method: ANY
-            RestApiId: !Ref ApiGateway
-      Policies:
-        - AWSLambdaBasicExecutionRole
-
   # CloudWatch Alarms
   HelloWorldErrorAlarm:
     Type: AWS::CloudWatch::Alarm
@@ -98,22 +74,6 @@ Resources:
         - Name: FunctionName
           Value: !Ref HelloWorldFunction
 
-  UserServiceErrorAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmName: !Sub 'ainx-user-service-errors-${Stage}'
-      AlarmDescription: Alarm when user-service function has errors
-      MetricName: Errors
-      Namespace: AWS/Lambda
-      Statistic: Sum
-      Period: 300
-      EvaluationPeriods: 1
-      Threshold: 1
-      ComparisonOperator: GreaterThanOrEqualToThreshold
-      Dimensions:
-        - Name: FunctionName
-          Value: !Ref UserServiceFunction
-
 Outputs:
   ApiUrl:
     Description: API Gateway endpoint URL
@@ -122,7 +82,3 @@ Outputs:
   HelloWorldFunctionArn:
     Description: Hello World Lambda function ARN
     Value: !GetAtt HelloWorldFunction.Arn
-  
-  UserServiceFunctionArn:
-    Description: User Service Lambda function ARN
-    Value: !GetAtt UserServiceFunction.Arn

@@ -7,8 +7,7 @@
 ```
 ainx-lambda/
 ├── functions/              # Lambda 函数目录
-│   ├── hello-world/        # 示例函数：Hello World
-│   └── user-service/       # 示例函数：用户服务
+│   └── hello-world/        # 示例函数：Hello World
 ├── packages/               # 共享代码包
 │   ├── logger/             # 日志工具
 │   └── shared-utils/       # 通用工具函数
