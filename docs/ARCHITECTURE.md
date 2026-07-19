@@ -29,7 +29,7 @@ AINX Lambda 采用 monorepo 架构，基于全球最佳实践设计，支持多�
 │  │ Lambda  │  │API Gateway│  │CloudWatch│  │
 │  │ Functions│  │         │  │         │  │
 │  └─────────┘  └─────────┘  └─────────┘  │
-└─────────────────────────────────────────┘
+└─────────────────────────────────────────
 ```
 
 ## 设计原则
@@ -49,6 +49,18 @@ AINX Lambda 采用 monorepo 架构，基于全球最佳实践设计，支持多�
 ### 4. 自动化优先
 
 所有部署通过 CI/CD 自动化，减少人工干预和错误。
+
+## 技术栈
+
+| 技术 | 版本 | 用途 |
+|------|------|------|
+| Node.js | 24.x | Lambda 运行时 |
+| TypeScript | 5.8+ | 开发语言 |
+| esbuild | 0.25+ | 构建工具 |
+| Jest | 29.7+ | 测试框架 |
+| ts-jest | 29.3+ | TypeScript 测试支持 |
+| AWS SAM | 最新 | 基础设施定义 |
+| GitHub Actions | 最新 | CI/CD |
 
 ## 技术选型理由
 
@@ -86,13 +98,64 @@ AINX Lambda 采用 monorepo 架构，基于全球最佳实践设计，支持多�
 - 本地测试支持
 - 学习曲线平缓
 
+### Jest 测试策略
+
+#### 测试层级
+
+```
+┌─────────────────────────────────────┐
+│         Integration Tests           │
+│    (Lambda Handler + API Gateway)   │
+├─────────────────────────────────────┤
+│          Unit Tests                 │
+│    (Business Logic + Utilities)     │
+├─────────────────────────────────────┤
+│         Shared Package Tests        │
+│    (Logger + Utils + Types)        │
+└─────────────────────────────────────┘
+```
+
+#### 测试配置
+
+- **单元测试**: `*.test.ts` - 测试单个函数或模块
+- **集成测试**: `*.integration.test.ts` - 测试完整请求流程
+- **覆盖率**: 目标 > 80%
+- **CI 集成**: PR 时自动运行，失败则阻止合并
+
+#### 测试工具
+
+- **Jest**: 测试框架
+- **ts-jest**: TypeScript 支持
+- **jest.mock**: 模拟依赖
+- **coverage**: 生成覆盖率报告
+
 ## 部署策略
+
+### GitHub Flow 工作流
+
+本项目采用 [GitHub Flow](https://docs.github.com/en/get-started/quickstart/github-flow)：
+
+```
+main (production-ready)
+  │
+  ├── feature/user-auth
+  │     │
+  │     └── PR → Code Review → Merge to main → Deploy
+  │
+  ├── feature/payment-gateway
+  │     │
+  │     └── PR → Code Review → Merge to main → Deploy
+  │
+  └── hotfix/security-patch
+        │
+        └── PR → Code Review → Merge to main → Deploy
+```
 
 ### 环境隔离
 
-- **dev**: 开发环境，自动部署
+- **dev**: 开发环境，本地测试
 - **staging**: 预发布环境，手动触发
-- **prod**: 生产环境，需要审批
+- **prod**: 生产环境，PR 合并后自动部署
 
 ### 按需部署
 

@@ -24,9 +24,10 @@ ainx-lambda/
 
 ## 技术栈
 
-- **运行时**: Node.js 20.x
-- **语言**: TypeScript 5.3+
+- **运行时**: Node.js 24.x
+- **语言**: TypeScript 5.8+
 - **构建工具**: esbuild
+- **测试框架**: Jest + ts-jest
 - **包管理**: NPM Workspaces
 - **基础设施**: AWS SAM
 - **CI/CD**: GitHub Actions
@@ -36,7 +37,7 @@ ainx-lambda/
 
 ### 1. 环境要求
 
-- Node.js >= 20.0.0
+- Node.js >= 24.0.0
 - NPM >= 10.0.0
 - AWS CLI (配置好凭证)
 - AWS SAM CLI
@@ -60,7 +61,26 @@ npm install
 ./infra/scripts/build.sh hello-world
 ```
 
-### 4. 部署
+### 4. 运行测试
+
+```bash
+# 运行所有测试
+npm run test
+
+# 运行特定包的测试
+npm run test --workspace=functions/hello-world
+
+# 运行测试并生成覆盖率报告
+npm run test:coverage
+
+# 运行集成测试
+npm run test:integration
+
+# 监听模式运行测试
+npm run test:watch
+```
+
+### 5. 部署
 
 ```bash
 # 部署到开发环境
@@ -87,13 +107,19 @@ npm install
 2. 创建 `package.json` 和 `index.ts`
 3. 在函数中通过 `@ainx/package-name` 引用
 
-## CI/CD 流程
+## CI/CD 流程 (GitHub Flow)
+
+本项目遵循 [GitHub Flow](https://docs.github.com/en/get-started/quickstart/github-flow) 工作流：
+
+### 分支策略
+
+- **`main`**: 唯一长期存在的分支，始终可部署
+- **Feature branches**: 从 `main` 创建，通过 PR 合并回 `main`
 
 ### 自动触发
 
-- **PR 到 main/develop**: 运行 lint、type-check、test
-- **Push 到 develop**: 自动部署到开发环境
-- **Push 到 main**: 自动部署到生产环境（需要审批）
+- **PR 到 main**: 运行 lint、type-check、test（单元测试 + 集成测试）
+- **Push 到 main**: 自动部署到生产环境
 
 ### 手动触发
 
@@ -114,6 +140,13 @@ npm install
 - **函数隔离**: 每个 Lambda 函数独立目录，包含自己的 package.json
 - **共享代码**: 通用逻辑放在 `packages/` 目录
 - **类型安全**: 所有代码使用 TypeScript，启用严格模式
+
+### 测试策略
+
+- **单元测试**: 每个函数和包都必须有对应的单元测试
+- **集成测试**: 测试 Lambda handler 的完整流程
+- **覆盖率**: 目标覆盖率 > 80%
+- **测试命名**: `*.test.ts` 为单元测试，`*.integration.test.ts` 为集成测试
 
 ### 部署策略
 
@@ -137,7 +170,7 @@ npm install
 
 1. Fork 本仓库
 2. 创建功能分支 (`git checkout -b feature/amazing-feature`)
-3. 提交更改 (`git commit -m 'Add amazing feature'`)
+3. 提交更改 (`git commit -m 'feat: add amazing feature'`)
 4. 推送分支 (`git push origin feature/amazing-feature`)
 5. 创建 Pull Request
 
@@ -153,3 +186,4 @@ MIT License - 详见 [LICENSE](LICENSE) 文件
 - [GitHub Actions 文档](https://docs.github.com/en/actions)
 - [esbuild 文档](https://esbuild.github.io/)
 - [TypeScript 文档](https://www.typescriptlang.org/docs/)
+- [Jest 文档](https://jestjs.io/docs/getting-started)
