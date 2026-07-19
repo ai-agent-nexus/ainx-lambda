@@ -1,0 +1,17 @@
+{
+  "name": "@ainx/logger",
+  "version": "1.0.0",
+  "description": "Shared logging utility for AINX Lambda functions",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "clean": "rm -rf dist"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.3"
+  }
+}

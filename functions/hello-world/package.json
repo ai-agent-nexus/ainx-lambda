@@ -1,0 +1,22 @@
+{
+  "name": "@ainx/hello-world",
+  "version": "1.0.0",
+  "description": "Hello World Lambda function",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "esbuild index.ts --bundle --platform=node --target=node20 --outfile=dist/index.js --external:aws-sdk",
+    "build:watch": "esbuild index.ts --bundle --platform=node --target=node20 --outfile=dist/index.js --external:aws-sdk --watch",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "deploy": "aws lambda update-function-code --function-name hello-world --zip-file fileb://dist/index.zip",
+    "package": "npm run build && cd dist && zip -r index.zip index.js"
+  },
+  "dependencies": {
+    "@ainx/logger": "^1.0.0",
+    "@ainx/shared-utils": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.131",
+    "esbuild": "^0.19.8"
+  }
+}
