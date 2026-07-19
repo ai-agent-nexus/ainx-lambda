@@ -1,9 +1,23 @@
 import { APIGatewayProxyEvent } from 'aws-lambda';
-import { handler } from './index';
+import { handler } from '../index';
 
 // Mock dependencies
 jest.mock('@ainx/logger');
-jest.mock('@ainx/shared-utils');
+
+jest.mock('@ainx/shared-utils', () => ({
+  formatResponse: jest.fn((statusCode: number, body: Record<string, unknown>) => ({
+    statusCode,
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Credentials': 'true',
+    },
+    body: JSON.stringify(body),
+  })),
+  validateInput: jest.fn(),
+  generateId: jest.fn(),
+  parseBody: jest.fn(),
+}));
 
 describe('hello-world handler', () => {
   let mockEvent: Partial<APIGatewayProxyEvent>;
@@ -42,8 +56,9 @@ describe('hello-world handler', () => {
   });
 
   it('should handle errors gracefully', async () => {
-    // Mock formatResponse to throw an error
-    jest.spyOn(console, 'log').mockImplementation(() => {
+    const { formatResponse } = await import('@ainx/shared-utils');
+    const mockedFormatResponse = jest.mocked(formatResponse);
+    mockedFormatResponse.mockImplementationOnce(() => {
       throw new Error('Test error');
     });
 

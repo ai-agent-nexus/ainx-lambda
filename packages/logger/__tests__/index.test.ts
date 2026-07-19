@@ -50,8 +50,10 @@ describe('Logger', () => {
       const after = new Date().toISOString();
 
       const logEntry = JSON.parse(mockConsoleLog.mock.calls[0][0]);
-      expect(logEntry.timestamp).toBeGreaterThanOrEqual(before);
-      expect(logEntry.timestamp).toBeLessThanOrEqual(after);
+      expect(new Date(logEntry.timestamp).getTime()).toBeGreaterThanOrEqual(
+        new Date(before).getTime()
+      );
+      expect(new Date(logEntry.timestamp).getTime()).toBeLessThanOrEqual(new Date(after).getTime());
     });
   });
 
