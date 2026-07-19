@@ -1,11 +1,11 @@
 name: CI/CD Pipeline
 
 on:
+  pull_request:
+    branches: [main]
   push:
     branches: [main]
     tags: ['v*']
-  pull_request:
-    branches: [main]
 
 env:
   NODE_VERSION: '24'
@@ -109,13 +109,13 @@ jobs:
           name: ${{ matrix.function }}-build
           path: functions/${{ matrix.function }}/dist/
 
-  # Deploy to testing environment (push to main branch)
-  deploy-testing:
+  # Deploy to SIT environment (PR to main)
+  deploy-sit:
     runs-on: ubuntu-latest
     needs: [build, test]
-    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+    if: ${{ github.event_name == 'pull_request' }}
     environment:
-      name: testing
+      name: sit
       url: ${{ steps.deploy.outputs.url }}
     steps:
       - uses: actions/checkout@v4
@@ -135,13 +135,48 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Deploy to testing environment
+      - name: Deploy to SIT environment
         id: deploy
         run: |
-          echo "Deploying to testing environment..."
-          npm run deploy:all -- --stage testing
+          echo "Deploying to SIT environment for PR #${{ github.event.pull_request.number }}..."
+          npm run deploy:all -- --stage sit
         env:
-          STAGE: testing
+          STAGE: sit
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+
+  # Deploy to UAT environment (merge to main)
+  deploy-uat:
+    runs-on: ubuntu-latest
+    needs: [build, test]
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+    environment:
+      name: uat
+      url: ${{ steps.deploy.outputs.url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Deploy to UAT environment
+        id: deploy
+        run: |
+          echo "Deploying to UAT environment..."
+          npm run deploy:all -- --stage uat
+        env:
+          STAGE: uat
 
   # Deploy to production (tag on main branch)
   deploy-prod:
