@@ -4,13 +4,11 @@ import { formatResponse } from '@ainx/shared-utils';
 
 const logger = new Logger('hello-world');
 
-export const handler = async (
-  event: APIGatewayProxyEvent
-): Promise<APIGatewayProxyResult> => {
+export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
-    logger.info('Hello World function invoked', { 
+    logger.info('Hello World function invoked', {
       path: event.path,
-      method: event.httpMethod 
+      method: event.httpMethod,
     });
 
     return formatResponse(200, {
@@ -20,7 +18,7 @@ export const handler = async (
     });
   } catch (error) {
     logger.error('Error in hello-world handler', { error });
-    
+
     return formatResponse(500, {
       message: 'Internal server error',
     });

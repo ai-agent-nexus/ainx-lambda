@@ -25,16 +25,14 @@ describe('Integration: hello-world handler', () => {
     expect(result.statusCode).toBe(200);
     expect(result.headers).toBeDefined();
     expect(result.headers?.['Content-Type']).toBe('application/json');
-    
+
     const body = JSON.parse(result.body);
     expect(body.message).toBe('Hello from AINX Lambda!');
     expect(body.timestamp).toBeDefined();
   });
 
   it('should handle concurrent requests', async () => {
-    const requests = Array.from({ length: 10 }, () => 
-      handler(mockEvent as APIGatewayProxyEvent)
-    );
+    const requests = Array.from({ length: 10 }, () => handler(mockEvent as APIGatewayProxyEvent));
 
     const results = await Promise.all(requests);
 

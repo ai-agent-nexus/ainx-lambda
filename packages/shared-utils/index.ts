@@ -26,7 +26,7 @@ export function validateInput(
   requiredFields: string[]
 ): { valid: boolean; missingFields: string[] } {
   const missingFields = requiredFields.filter((field) => !input[field]);
-  
+
   return {
     valid: missingFields.length === 0,
     missingFields,
@@ -45,7 +45,7 @@ export function generateId(): string {
  */
 export function parseBody<T>(body: string | null): T | null {
   if (!body) return null;
-  
+
   try {
     return JSON.parse(body) as T;
   } catch {

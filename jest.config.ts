@@ -8,12 +8,7 @@ const config: Config = {
   transform: {
     '^.+\\.ts$': 'ts-jest',
   },
-  collectCoverageFrom: [
-    '**/*.ts',
-    '!**/node_modules/**',
-    '!**/dist/**',
-    '!**/coverage/**',
-  ],
+  collectCoverageFrom: ['**/*.ts', '!**/node_modules/**', '!**/dist/**', '!**/coverage/**'],
   coverageDirectory: 'coverage',
   coverageReporters: ['text', 'lcov', 'html'],
   moduleFileExtensions: ['ts', 'js', 'json'],

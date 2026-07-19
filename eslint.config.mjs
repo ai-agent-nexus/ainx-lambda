@@ -18,6 +18,7 @@ export default [
       globals: {
         node: true,
         es2024: true,
+        console: true,
       },
     },
     plugins: {
