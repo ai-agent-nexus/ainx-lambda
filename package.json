@@ -10,6 +10,8 @@
   "scripts": {
     "build": "npm run build --workspaces",
     "test": "npm run test --workspaces",
+    "test:coverage": "jest --coverage",
+    "test:integration": "jest --testPathPattern=integration",
     "lint": "eslint . --ext .ts,.js",
     "lint:fix": "eslint . --ext .ts,.js --fix",
     "format": "prettier --write \"**/*.{ts,js,json,md}\"",
