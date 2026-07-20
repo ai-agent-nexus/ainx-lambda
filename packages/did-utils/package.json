@@ -2,8 +2,8 @@
   "name": "@ainx/did-utils",
   "version": "1.0.0",
   "description": "DID key parsing utilities for AINX",
-  "main": "dist/src/index.js",
-  "types": "dist/src/index.d.ts",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
     "build:watch": "tsc --watch",
