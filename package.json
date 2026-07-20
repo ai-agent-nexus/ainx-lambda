@@ -18,7 +18,8 @@
     "format:check": "prettier --check \"**/*.{ts,js,json,md}\"",
     "clean": "npm run clean --workspaces && rm -rf node_modules",
     "deploy:all": "npm run deploy --workspaces",
-    "deploy:changed": "node scripts/deploy-changed.js"
+    "deploy:changed": "node scripts/deploy-changed.js",
+    "deploy:agent-registration": "cd functions/agent-registration && npm run build && npm run package && aws lambda update-function-code --function-name agent-registration --zip-file fileb://dist/index.zip"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.149",
