@@ -27,8 +27,25 @@ Parameters:
 Conditions:
   IsProd: !Equals [!Ref Stage, 'prod']
 
+Mappings:
+  StageConfig:
+    dev:
+      ReadMinCapacity: 1
+      ReadMaxCapacity: 10
+      WriteMinCapacity: 1
+      WriteMaxCapacity: 5
+    staging:
+      ReadMinCapacity: 1
+      ReadMaxCapacity: 10
+      WriteMinCapacity: 1
+      WriteMaxCapacity: 5
+    prod:
+      ReadMinCapacity: 1
+      ReadMaxCapacity: 10
+      WriteMinCapacity: 1
+      WriteMaxCapacity: 5
+
 Resources:
-  # API Gateway
   ApiGateway:
     Type: AWS::Serverless::Api
     Properties:
@@ -39,7 +56,6 @@ Resources:
         AllowOrigin: '''*'''
       TracingEnabled: true
 
-  # Hello World Lambda
   HelloWorldFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -57,7 +73,6 @@ Resources:
       Policies:
         - AWSLambdaBasicExecutionRole
 
-  # CloudWatch Alarms
   HelloWorldErrorAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
@@ -74,6 +89,152 @@ Resources:
         - Name: FunctionName
           Value: !Ref HelloWorldFunction
 
+  AgentRegistrationFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'ainx-agent-registration-${Stage}'
+      Handler: index.handler
+      CodeUri: ../functions/agent-registration/dist/
+      Description: Agent registration Lambda function
+      MemorySize: 128
+      Environment:
+        Variables:
+          AGENT_REGISTRATION_TABLE_NAME: !Ref AgentRegistrationTable
+      Events:
+        AgentRegistrationApi:
+          Type: Api
+          Properties:
+            Path: /agents/register
+            Method: POST
+            RestApiId: !Ref ApiGateway
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:GetItem
+              Resource: !GetAtt AgentRegistrationTable.Arn
+
+  AgentRegistrationErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'ainx-agent-registration-errors-${Stage}'
+      AlarmDescription: Alarm when agent-registration function error rate exceeds 1%
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AgentRegistrationFunction
+
+  AgentRegistrationThrottlingAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'ainx-agent-registration-throttling-${Stage}'
+      AlarmDescription: Alarm when agent-registration function is throttled
+      MetricName: Throttles
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AgentRegistrationFunction
+
+  AgentRegistrationTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'ainx-agent-registration-${Stage}'
+      BillingMode: PROVISIONED
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      AttributeDefinitions:
+        - AttributeName: did
+          AttributeType: S
+      KeySchema:
+        - AttributeName: did
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: !If [IsProd, true, false]
+      SSESpecification:
+        SSEEnabled: true
+        SSEType: KMS
+        KMSMasterKeyId: alias/aws/dynamodb
+      Tags:
+        - Key: Project
+          Value: AINX
+        - Key: Environment
+          Value: !Ref Stage
+        - Key: Service
+          Value: agent-registration
+
+  AgentRegistrationTableReadScalingTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      MaxCapacity: !FindInMap [StageConfig, !Ref Stage, ReadMaxCapacity]
+      MinCapacity: !FindInMap [StageConfig, !Ref Stage, ReadMinCapacity]
+      ResourceId: !Sub 'table/${AgentRegistrationTable}'
+      RoleARN: !GetAtt DynamoDBAutoScalingRole.Arn
+      ScalableDimension: dynamodb:table:ReadCapacityUnits
+      ServiceNamespace: dynamodb
+
+  AgentRegistrationTableReadScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub 'ainx-agent-registration-read-scaling-${Stage}'
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref AgentRegistrationTableReadScalingTarget
+      TargetTrackingScalingPolicyConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: DynamoDBReadCapacityUtilization
+        TargetValue: 70.0
+
+  AgentRegistrationTableWriteScalingTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      MaxCapacity: !FindInMap [StageConfig, !Ref Stage, WriteMaxCapacity]
+      MinCapacity: !FindInMap [StageConfig, !Ref Stage, WriteMinCapacity]
+      ResourceId: !Sub 'table/${AgentRegistrationTable}'
+      RoleARN: !GetAtt DynamoDBAutoScalingRole.Arn
+      ScalableDimension: dynamodb:table:WriteCapacityUnits
+      ServiceNamespace: dynamodb
+
+  AgentRegistrationTableWriteScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub 'ainx-agent-registration-write-scaling-${Stage}'
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref AgentRegistrationTableWriteScalingTarget
+      TargetTrackingScalingPolicyConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: DynamoDBWriteCapacityUtilization
+        TargetValue: 70.0
+
+  DynamoDBAutoScalingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: application-autoscaling.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonDynamoDBFullAccess
+
 Outputs:
   ApiUrl:
     Description: API Gateway endpoint URL
@@ -82,3 +243,7 @@ Outputs:
   HelloWorldFunctionArn:
     Description: Hello World Lambda function ARN
     Value: !GetAtt HelloWorldFunction.Arn
+
+  AgentRegistrationFunctionArn:
+    Description: Agent Registration Lambda function ARN
+    Value: !GetAtt AgentRegistrationFunction.Arn
