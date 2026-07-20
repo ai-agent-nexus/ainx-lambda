@@ -1,5 +1,6 @@
 import { APIGatewayProxyEvent } from 'aws-lambda';
 import { handler } from '../src/index';
+import { verifySignature } from '@ainx/crypto-utils';
 
 // Mock dependencies
 jest.mock('@ainx/logger');
@@ -127,7 +128,6 @@ describe('agent-registration handler', () => {
   });
 
   it('should return 400 for invalid signature', async () => {
-    const { verifySignature } = require('@ainx/crypto-utils');
     const mockedVerifySignature = jest.mocked(verifySignature);
     mockedVerifySignature.mockReturnValueOnce(false);
 

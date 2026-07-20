@@ -17,6 +17,6 @@
     "incremental": true,
     "tsBuildInfoFile": ".tsbuildinfo"
   },
-  "include": ["packages/**/*.ts", "functions/**/*.ts"],
+  "include": ["packages/**/*.ts", "functions/**/*.ts", "jest.config.js"],
   "exclude": ["node_modules", "dist", "**/*.test.ts", "**/__tests__/**"]
 }

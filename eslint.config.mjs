@@ -19,6 +19,8 @@ export default [
         node: true,
         es2024: true,
         console: true,
+        process: true,
+        Buffer: true,
       },
     },
     plugins: {
@@ -40,6 +42,7 @@ export default [
       parserOptions: {
         ecmaVersion: 2024,
         sourceType: 'module',
+        project: null,
       },
       globals: {
         node: true,
@@ -54,6 +57,8 @@ export default [
         beforeAll: true,
         afterAll: true,
         console: true,
+        process: true,
+        Buffer: true,
       },
     },
   },
@@ -66,6 +71,6 @@ export default [
   },
   prettierConfig,
   {
-    ignores: ['dist/', 'node_modules/', '*.js'],
+    ignores: ['dist/', 'node_modules/', '*.js', '**/*.d.ts', '**/dist/**'],
   },
 ];

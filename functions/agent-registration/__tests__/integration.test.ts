@@ -58,7 +58,10 @@ jest.mock('aws-sdk', () => ({
       put: jest.fn((params: { Item: { did: string }; ConditionExpression: string }) => ({
         promise: jest.fn().mockImplementation(() => {
           const { did } = params.Item;
-          if (dynamoDBState.has(did) && params.ConditionExpression?.includes('attribute_not_exists')) {
+          if (
+            dynamoDBState.has(did) &&
+            params.ConditionExpression?.includes('attribute_not_exists')
+          ) {
             const error = new Error('The conditional request failed');
             (error as Error & { name: string }).name = 'ConditionalCheckFailedException';
             return Promise.reject(error);
@@ -128,9 +131,7 @@ describe('Integration: agent-registration handler', () => {
   });
 
   it('should handle concurrent registration attempts', async () => {
-    const requests = Array.from({ length: 5 }, () =>
-      handler(mockEvent as APIGatewayProxyEvent)
-    );
+    const requests = Array.from({ length: 5 }, () => handler(mockEvent as APIGatewayProxyEvent));
 
     const results = await Promise.all(requests);
 

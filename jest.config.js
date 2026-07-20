@@ -17,9 +17,9 @@ module.exports = {
   clearMocks: true,
   testTimeout: 10000,
   moduleNameMapper: {
-    '^@ainx/logger$': path.resolve(__dirname, 'packages/logger/dist/index.js'),
-    '^@ainx/shared-utils$': path.resolve(__dirname, 'packages/shared-utils/dist/index.js'),
-    '^@ainx/crypto-utils$': path.resolve(__dirname, 'packages/crypto-utils/dist/index.js'),
-    '^@ainx/did-utils$': path.resolve(__dirname, 'packages/did-utils/dist/index.js'),
+    '^@ainx/logger$': path.resolve(__dirname, 'packages/logger/index.ts'),
+    '^@ainx/shared-utils$': path.resolve(__dirname, 'packages/shared-utils/index.ts'),
+    '^@ainx/crypto-utils$': path.resolve(__dirname, 'packages/crypto-utils/src/index.ts'),
+    '^@ainx/did-utils$': path.resolve(__dirname, 'packages/did-utils/src/index.ts'),
   },
 };

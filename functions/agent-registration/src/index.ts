@@ -16,9 +16,7 @@ interface AgentRegistrationRequest {
   metadata: Record<string, unknown>;
 }
 
-export const handler = async (
-  event: APIGatewayProxyEvent
-): Promise<APIGatewayProxyResult> => {
+export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
     logger.info('Agent registration invoked', {
       path: event.path,
@@ -34,7 +32,11 @@ export const handler = async (
       });
     }
 
-    const validation = validateInput(body as unknown as Record<string, unknown>, ['did', 'signature', 'metadata']);
+    const validation = validateInput(body as unknown as Record<string, unknown>, [
+      'did',
+      'signature',
+      'metadata',
+    ]);
     if (!validation.valid) {
       logger.warn('Missing required fields', { missing: validation.missingFields });
       return formatResponse(400, {

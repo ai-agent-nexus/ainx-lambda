@@ -16,7 +16,7 @@ export function verifySignature(
   }
 
   try {
-    return cryptoVerify(null, Buffer.from(message), publicKey, signature);
+    return cryptoVerify(null, Buffer.from(message), publicKey as any, signature);
   } catch {
     return false;
   }

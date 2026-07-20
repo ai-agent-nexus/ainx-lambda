@@ -40,7 +40,9 @@ export function parseDidKey(did: string): ParsedDidKey {
   const publicKey = decoded.slice(2);
 
   if (publicKey.length !== 32) {
-    throw new Error(`Invalid ed25519 public key length: expected 32 bytes, got ${publicKey.length}`);
+    throw new Error(
+      `Invalid ed25519 public key length: expected 32 bytes, got ${publicKey.length}`
+    );
   }
 
   return {
