@@ -6,6 +6,11 @@ module.exports = {
   testEnvironment: 'node',
   roots: ['<rootDir>'],
   testMatch: ['**/__tests__/**/*.test.ts'],
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    '/dist/',
+    'e2e\\.test\\.ts$', // E2E tests require real API Gateway
+  ],
   transform: {
     '^.+\\.ts$': 'ts-jest',
   },
