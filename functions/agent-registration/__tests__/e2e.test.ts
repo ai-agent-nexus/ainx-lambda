@@ -2,10 +2,10 @@ import axios from 'axios';
 
 /**
  * E2E Tests for agent-registration
- * 
+ *
  * These tests call the actual API Gateway endpoint to verify end-to-end functionality.
  * Run with: API_GATEWAY_URL=<url> npm run test:e2e
- * 
+ *
  * Requirements:
  * - API_GATEWAY_URL environment variable pointing to the deployed API Gateway
  * - AWS credentials for the test environment
@@ -74,10 +74,11 @@ describe('E2E: agent-registration', () => {
           headers: { 'Content-Type': 'application/json' },
           timeout: 10000,
         });
-        fail('Expected request to fail');
-      } catch (error: any) {
-        expect(error.response.status).toBe(400);
-        expect(error.response.data.code).toBe('INVALID_DID');
+        throw new Error('Expected request to fail');
+      } catch (error: unknown) {
+        const axiosError = error as { response?: { status: number; data: { code: string } } };
+        expect(axiosError.response?.status).toBe(400);
+        expect(axiosError.response?.data.code).toBe('INVALID_DID');
       }
     });
 
@@ -92,10 +93,11 @@ describe('E2E: agent-registration', () => {
           headers: { 'Content-Type': 'application/json' },
           timeout: 10000,
         });
-        fail('Expected request to fail');
-      } catch (error: any) {
-        expect(error.response.status).toBe(400);
-        expect(error.response.data.code).toBe('MISSING_FIELDS');
+        throw new Error('Expected request to fail');
+      } catch (error: unknown) {
+        const axiosError = error as { response?: { status: number; data: { code: string } } };
+        expect(axiosError.response?.status).toBe(400);
+        expect(axiosError.response?.data.code).toBe('MISSING_FIELDS');
       }
     });
 
@@ -120,10 +122,11 @@ describe('E2E: agent-registration', () => {
           headers: { 'Content-Type': 'application/json' },
           timeout: 10000,
         });
-        fail('Expected request to fail');
-      } catch (error: any) {
-        expect(error.response.status).toBe(409);
-        expect(error.response.data.code).toBe('DUPLICATE_DID');
+        throw new Error('Expected request to fail');
+      } catch (error: unknown) {
+        const axiosError = error as { response?: { status: number; data: { code: string } } };
+        expect(axiosError.response?.status).toBe(409);
+        expect(axiosError.response?.data.code).toBe('DUPLICATE_DID');
       }
     });
 
@@ -139,10 +142,11 @@ describe('E2E: agent-registration', () => {
           headers: { 'Content-Type': 'application/json' },
           timeout: 10000,
         });
-        fail('Expected request to fail');
-      } catch (error: any) {
-        expect(error.response.status).toBe(400);
-        expect(error.response.data.code).toBe('INVALID_SIGNATURE');
+        throw new Error('Expected request to fail');
+      } catch (error: unknown) {
+        const axiosError = error as { response?: { status: number; data: { code: string } } };
+        expect(axiosError.response?.status).toBe(400);
+        expect(axiosError.response?.data.code).toBe('INVALID_SIGNATURE');
       }
     });
   });
@@ -150,13 +154,18 @@ describe('E2E: agent-registration', () => {
   describe('Edge Cases', () => {
     it('should handle empty request body', async () => {
       try {
-        await axios.post(API_GATEWAY_URL, {}, {
-          headers: { 'Content-Type': 'application/json' },
-          timeout: 10000,
-        });
-        fail('Expected request to fail');
-      } catch (error: any) {
-        expect(error.response.status).toBe(400);
+        await axios.post(
+          API_GATEWAY_URL,
+          {},
+          {
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 10000,
+          }
+        );
+        throw new Error('Expected request to fail');
+      } catch (error: unknown) {
+        const axiosError = error as { response?: { status: number } };
+        expect(axiosError.response?.status).toBe(400);
       }
     });
 
