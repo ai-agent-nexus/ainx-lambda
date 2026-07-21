@@ -203,27 +203,38 @@ jobs:
             
             # Create REST API
             API_ID=$(aws apigateway create-rest-api --name "$API_NAME" --query 'id' --output text)
+            echo "Created API Gateway with ID: $API_ID"
             
-            # Get root resource id
-            ROOT_RESOURCE_ID=$(aws apigateway get-resources --rest-api-id "$API_ID" --query 'items[?path=="/"].id' --output text)
+            # Wait a moment for API to be ready
+            sleep 2
+            
+            # Get root resource id - use items[0].id for new APIs
+            ROOT_RESOURCE_ID=$(aws apigateway get-resources --rest-api-id "$API_ID" --query 'items[0].id' --output text)
+            echo "Root resource ID: $ROOT_RESOURCE_ID"
             
             # Create /agents resource
             AGENTS_RESOURCE_ID=$(aws apigateway create-resource --rest-api-id "$API_ID" --parent-id "$ROOT_RESOURCE_ID" --path-part "agents" --query 'id' --output text)
+            echo "Created /agents resource with ID: $AGENTS_RESOURCE_ID"
             
             # Create /register resource
             REGISTER_RESOURCE_ID=$(aws apigateway create-resource --rest-api-id "$API_ID" --parent-id "$AGENTS_RESOURCE_ID" --path-part "register" --query 'id' --output text)
+            echo "Created /register resource with ID: $REGISTER_RESOURCE_ID"
             
             # Create POST method
             aws apigateway put-method --rest-api-id "$API_ID" --resource-id "$REGISTER_RESOURCE_ID" --http-method POST --authorization-type NONE
+            echo "Created POST method"
             
             # Create Lambda integration
             aws apigateway put-integration --rest-api-id "$API_ID" --resource-id "$REGISTER_RESOURCE_ID" --http-method POST --type AWS_PROXY --integration-http-method POST --uri "arn:aws:apigateway:${{ env.AWS_REGION }}:lambda:path/2015-03-31/functions/${LAMBDA_ARN}/invocations"
+            echo "Created Lambda integration"
             
             # Create deployment
             aws apigateway create-deployment --rest-api-id "$API_ID" --stage-name "$STAGE_NAME"
+            echo "Created deployment to stage: $STAGE_NAME"
             
             # Add Lambda permission for API Gateway
-            aws lambda add-permission --function-name "$FUNCTION_NAME" --statement-id apigateway-invoke --action lambda:InvokeFunction --principal apigateway.amazonaws.com --source-arn "arn:aws:execute-api:${{ env.AWS_REGION }}:$(aws sts get-caller-identity --query Account --output text):${API_ID}/*/POST/agents/register" || true
+            ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+            aws lambda add-permission --function-name "$FUNCTION_NAME" --statement-id apigateway-invoke --action lambda:InvokeFunction --principal apigateway.amazonaws.com --source-arn "arn:aws:execute-api:${{ env.AWS_REGION }}:${ACCOUNT_ID}:${API_ID}/*/POST/agents/register" || true
             
             echo "API Gateway created: https://${API_ID}.execute-api.${{ env.AWS_REGION }}.amazonaws.com/${STAGE_NAME}"
           else
