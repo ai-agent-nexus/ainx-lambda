@@ -180,10 +180,6 @@ jobs:
         run: |
           ./scripts/update-lambda.sh ainx-agent-registration-sit functions/agent-registration/dist/index.zip
 
-      - name: Create or update API Gateway
-        run: |
-          ./scripts/setup-api-gateway.sh ainx-api-sit ainx-agent-registration-sit sit ${{ env.AWS_REGION }}
-
       - name: Get API Gateway URL
         id: get-api-url
         run: |
