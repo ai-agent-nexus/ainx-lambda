@@ -10,6 +10,7 @@
     "test:watch": "jest --watch --config ../../jest.config.js",
     "test:coverage": "jest --coverage --config ../../jest.config.js",
     "test:integration": "jest --config ../../jest.config.js --testPathPattern=integration",
+    "test:e2e": "jest --config ../../jest.config.js --testPathPattern=e2e",
     "package": "npm run build && cd dist && zip -r index.zip index.js"
   },
   "dependencies": {

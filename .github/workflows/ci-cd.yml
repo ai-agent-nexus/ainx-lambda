@@ -184,6 +184,35 @@ jobs:
         run: |
           ./scripts/setup-api-gateway.sh ainx-api-sit ainx-agent-registration-sit sit ${{ env.AWS_REGION }}
 
+      - name: Get API Gateway URL
+        id: get-api-url
+        run: |
+          API_ID=$(aws apigateway get-rest-apis --query "items[?name=='ainx-api-sit'].id" --output text)
+          if [ -n "$API_ID" ]; then
+            API_URL="https://${API_ID}.execute-api.${{ env.AWS_REGION }}.amazonaws.com/sit/agents/register"
+            echo "API_URL=$API_URL" >> $GITHUB_ENV
+            echo "api_url=$API_URL" >> $GITHUB_OUTPUT
+            echo "API Gateway URL: $API_URL"
+          else
+            echo "Error: API Gateway not found"
+            exit 1
+          fi
+
+      - name: Run E2E tests
+        run: |
+          echo "Running E2E tests against $API_URL"
+          cd functions/agent-registration
+          npm run test:e2e -- --testNamePattern="Happy Path"
+        env:
+          API_GATEWAY_URL: ${{ env.API_URL }}
+
+      - name: Verify deployment
+        run: |
+          echo "Deployment verification complete"
+          echo "API Gateway URL: ${{ env.API_URL }}"
+          echo "Lambda Function: ainx-agent-registration-sit"
+          echo "Stage: sit"
+
   # Deploy jobs - disabled until SIT is verified
   # deploy-uat:
   #   runs-on: ubuntu-latest
