@@ -56,39 +56,6 @@ Resources:
         AllowOrigin: '''*'''
       TracingEnabled: true
 
-  HelloWorldFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      FunctionName: !Sub 'ainx-hello-world-${Stage}'
-      Handler: index.handler
-      CodeUri: ../functions/hello-world/dist/
-      Description: Hello World Lambda function
-      Events:
-        HelloWorldApi:
-          Type: Api
-          Properties:
-            Path: /hello
-            Method: GET
-            RestApiId: !Ref ApiGateway
-      Policies:
-        - AWSLambdaBasicExecutionRole
-
-  HelloWorldErrorAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmName: !Sub 'ainx-hello-world-errors-${Stage}'
-      AlarmDescription: Alarm when hello-world function has errors
-      MetricName: Errors
-      Namespace: AWS/Lambda
-      Statistic: Sum
-      Period: 300
-      EvaluationPeriods: 1
-      Threshold: 1
-      ComparisonOperator: GreaterThanOrEqualToThreshold
-      Dimensions:
-        - Name: FunctionName
-          Value: !Ref HelloWorldFunction
-
   AgentRegistrationFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -240,10 +207,6 @@ Outputs:
     Description: API Gateway endpoint URL
     Value: !Sub 'https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Stage}'
   
-  HelloWorldFunctionArn:
-    Description: Hello World Lambda function ARN
-    Value: !GetAtt HelloWorldFunction.Arn
-
   AgentRegistrationFunctionArn:
     Description: Agent Registration Lambda function ARN
     Value: !GetAtt AgentRegistrationFunction.Arn

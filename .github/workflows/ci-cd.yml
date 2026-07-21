@@ -131,7 +131,7 @@ jobs:
     if: ${{ needs.detect-changes.outputs.functions == 'true' }}
     strategy:
       matrix:
-        function: [hello-world, agent-registration]
+        function: [agent-registration]
     steps:
       - uses: actions/checkout@v4
 
@@ -160,7 +160,7 @@ jobs:
     if: github.event_name == 'pull_request'
     strategy:
       matrix:
-        function: [hello-world, agent-registration]
+        function: [agent-registration]
     steps:
       - uses: actions/checkout@v4
 
