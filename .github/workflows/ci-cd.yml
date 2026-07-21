@@ -71,8 +71,8 @@ jobs:
       - name: Run TypeScript compiler
         run: npx tsc --noEmit
 
-  # Test all packages with coverage
-  test:
+  unit-test:
+    runs-on: ubuntu-latest
     runs-on: ubuntu-latest
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.packages == 'true' || needs.detect-changes.outputs.functions == 'true' }}
@@ -128,7 +128,7 @@ jobs:
   # Build affected functions
   build:
     runs-on: ubuntu-latest
-    needs: [detect-changes, lint]
+    needs: [detect-changes, lint, unit-test]
     if: ${{ needs.detect-changes.outputs.functions == 'true' }}
     strategy:
       matrix:
