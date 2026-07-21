@@ -39,18 +39,22 @@ describe('verifySignature', () => {
     expect(() => verifySignature(publicKey as unknown as Buffer, '', Buffer.from('sig'))).toThrow(
       'Message must be a non-empty string'
     );
-    expect(() => verifySignature(publicKey as unknown as Buffer, null as unknown as string, Buffer.from('sig'))).toThrow(
-      'Message must be a non-empty string'
-    );
+    expect(() =>
+      verifySignature(publicKey as unknown as Buffer, null as unknown as string, Buffer.from('sig'))
+    ).toThrow('Message must be a non-empty string');
   });
 
   it('should throw on invalid signature', () => {
     const { publicKey } = generateTestKeyPair();
-    expect(() => verifySignature(publicKey as unknown as Buffer, 'message', null as unknown as Buffer)).toThrow(
-      'Signature must be a Buffer'
-    );
     expect(() =>
-      verifySignature(publicKey as unknown as Buffer, 'message', 'not-a-buffer' as unknown as Buffer)
+      verifySignature(publicKey as unknown as Buffer, 'message', null as unknown as Buffer)
+    ).toThrow('Signature must be a Buffer');
+    expect(() =>
+      verifySignature(
+        publicKey as unknown as Buffer,
+        'message',
+        'not-a-buffer' as unknown as Buffer
+      )
     ).toThrow('Signature must be a Buffer');
   });
 });
