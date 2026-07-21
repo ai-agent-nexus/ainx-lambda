@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces",
-    "test": "npm run test --workspaces",
+    "test": "jest",
     "test:coverage": "jest --coverage",
     "test:integration": "jest --testPathPattern=integration",
     "lint": "eslint . --ext .ts,.js",
