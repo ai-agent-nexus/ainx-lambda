@@ -195,80 +195,81 @@ jobs:
             echo "Note: First-time deployment requires manual creation via SAM/Console"
           fi
 
-  deploy-uat:
-    runs-on: ubuntu-latest
-    needs: [build]
-    if: github.ref == 'refs/heads/main'
-    environment: uat
-    strategy:
-      matrix:
-        function: [hello-world, agent-registration]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ matrix.function }}-build
-          path: functions/${{ matrix.function }}/dist/
-
-      - name: Deploy ${{ matrix.function }} to UAT
-        run: |
-          FUNCTION_NAME="ainx-${{ matrix.function }}-uat"
-          ZIP_FILE="functions/${{ matrix.function }}/dist/index.zip"
-          
-          echo "Deploying ${{ matrix.function }} to UAT..."
-          
-          if aws lambda get-function --function-name "$FUNCTION_NAME" > /dev/null 2>&1; then
-            aws lambda update-function-code \
-              --function-name "$FUNCTION_NAME" \
-              --zip-file "fileb://${ZIP_FILE}"
-          else
-            echo "Function $FUNCTION_NAME does not exist. Skipping..."
-          fi
-
-  deploy-prod:
-    runs-on: ubuntu-latest
-    needs: [build]
-    if: startsWith(github.ref, 'refs/tags/v')
-    environment: production
-    strategy:
-      matrix:
-        function: [hello-world, agent-registration]
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Download build artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ matrix.function }}-build
-          path: functions/${{ matrix.function }}/dist/
-
-      - name: Deploy ${{ matrix.function }} to Production
-        run: |
-          FUNCTION_NAME="ainx-${{ matrix.function }}-prod"
-          ZIP_FILE="functions/${{ matrix.function }}/dist/index.zip"
-          
-          echo "Deploying ${{ matrix.function }} to Production..."
-          
-          if aws lambda get-function --function-name "$FUNCTION_NAME" > /dev/null 2>&1; then
-            aws lambda update-function-code \
-              --function-name "$FUNCTION_NAME" \
-              --zip-file "fileb://${ZIP_FILE}"
-          else
-            echo "Function $FUNCTION_NAME does not exist. Skipping..."
-          fi
+  # Deploy jobs - disabled until SIT is verified
+  # deploy-uat:
+  #   runs-on: ubuntu-latest
+  #   needs: [build]
+  #   if: github.ref == 'refs/heads/main'
+  #   environment: uat
+  #   strategy:
+  #     matrix:
+  #       function: [hello-world, agent-registration]
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #
+  #     - name: Configure AWS credentials
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  #         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  #         aws-region: ${{ env.AWS_REGION }}
+  #
+  #     - name: Download build artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: ${{ matrix.function }}-build
+  #         path: functions/${{ matrix.function }}/dist/
+  #
+  #     - name: Deploy ${{ matrix.function }} to UAT
+  #       run: |
+  #         FUNCTION_NAME="ainx-${{ matrix.function }}-uat"
+  #         ZIP_FILE="functions/${{ matrix.function }}/dist/index.zip"
+  #         
+  #         echo "Deploying ${{ matrix.function }} to UAT..."
+  #         
+  #         if aws lambda get-function --function-name "$FUNCTION_NAME" > /dev/null 2>&1; then
+  #           aws lambda update-function-code \
+  #             --function-name "$FUNCTION_NAME" \
+  #             --zip-file "fileb://${ZIP_FILE}"
+  #         else
+  #           echo "Function $FUNCTION_NAME does not exist. Skipping..."
+  #         fi
+  #
+  # deploy-prod:
+  #   runs-on: ubuntu-latest
+  #   needs: [build]
+  #   if: startsWith(github.ref, 'refs/tags/v')
+  #   environment: production
+  #   strategy:
+  #     matrix:
+  #       function: [hello-world, agent-registration]
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #
+  #     - name: Configure AWS credentials
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  #         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  #         aws-region: ${{ env.AWS_REGION }}
+  #
+  #     - name: Download build artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: ${{ matrix.function }}-build
+  #         path: functions/${{ matrix.function }}/dist/
+  #
+  #     - name: Deploy ${{ matrix.function }} to Production
+  #       run: |
+  #         FUNCTION_NAME="ainx-${{ matrix.function }}-prod"
+  #         ZIP_FILE="functions/${{ matrix.function }}/dist/index.zip"
+  #         
+  #         echo "Deploying ${{ matrix.function }} to Production..."
+  #         
+  #         if aws lambda get-function --function-name "$FUNCTION_NAME" > /dev/null 2>&1; then
+  #           aws lambda update-function-code \
+  #             --function-name "$FUNCTION_NAME" \
+  #             --zip-file "fileb://${ZIP_FILE}"
+  #         else
+  #           echo "Function $FUNCTION_NAME does not exist. Skipping..."
+  #         fi
