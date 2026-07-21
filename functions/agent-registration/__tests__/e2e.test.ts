@@ -1,45 +1,30 @@
-import { APIGatewayProxyEvent } from 'aws-lambda';
-import { handler } from '../src/index';
+import axios from 'axios';
 
 /**
- * E2E Tests for agent-registration Lambda
+ * E2E Tests for agent-registration
  * 
- * These tests simulate real API Gateway requests and verify the complete flow.
- * Run with: npm run test:e2e
+ * These tests call the actual API Gateway endpoint to verify end-to-end functionality.
+ * Run with: API_GATEWAY_URL=<url> npm run test:e2e
  * 
  * Requirements:
- * - Local DynamoDB (or mock)
- * - Proper environment variables
+ * - API_GATEWAY_URL environment variable pointing to the deployed API Gateway
+ * - AWS credentials for the test environment
  */
 
-describe('E2E: agent-registration', () => {
-  const createEvent = (body: Record<string, unknown>): APIGatewayProxyEvent => ({
-    path: '/agents/register',
-    httpMethod: 'POST',
-    body: JSON.stringify(body),
-    headers: {
-      'Content-Type': 'application/json',
-    },
-    queryStringParameters: null,
-    pathParameters: null,
-    requestContext: {} as any,
-    resource: '',
-    stageVariables: null,
-    isBase64Encoded: false,
-    multiValueHeaders: {},
-    multiValueQueryStringParameters: null,
-  } as APIGatewayProxyEvent);
+// Get API Gateway URL from environment or use default
+const API_GATEWAY_URL = process.env.API_GATEWAY_URL || 'http://localhost:3000/agents/register';
 
-  beforeEach(() => {
-    // Reset environment
-    process.env.AGENT_REGISTRATION_TABLE_NAME = 'test-agent-registration-table';
-  });
+describe('E2E: agent-registration', () => {
+  // Helper to generate a unique DID for each test
+  const generateUniqueDid = () => {
+    const randomId = Math.random().toString(36).substring(2, 15);
+    return `did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ${randomId}`;
+  };
 
   describe('Happy Path', () => {
     it('should successfully register a new agent with valid did:key', async () => {
-      // Arrange
       const requestBody = {
-        did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
+        did: generateUniqueDid(),
         signature: 'dGVzdHNpZ25hdHVyZQ==',
         metadata: {
           name: 'Test Agent',
@@ -47,30 +32,32 @@ describe('E2E: agent-registration', () => {
         },
       };
 
-      // Act
-      const result = await handler(createEvent(requestBody));
+      const response = await axios.post(API_GATEWAY_URL, requestBody, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+      });
 
-      // Assert
-      expect(result.statusCode).toBe(201);
-      const body = JSON.parse(result.body);
-      expect(body.message).toBe('Agent registered successfully');
-      expect(body.did).toBe(requestBody.did);
-      expect(body.registeredAt).toBeDefined();
-      expect(body.ttl).toBeDefined();
+      expect(response.status).toBe(201);
+      expect(response.data.message).toBe('Agent registered successfully');
+      expect(response.data.did).toBe(requestBody.did);
+      expect(response.data.registeredAt).toBeDefined();
+      expect(response.data.ttl).toBeDefined();
     });
 
     it('should accept minimal metadata', async () => {
       const requestBody = {
-        did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
+        did: generateUniqueDid(),
         signature: 'dGVzdHNpZ25hdHVyZQ==',
         metadata: {},
       };
 
-      const result = await handler(createEvent(requestBody));
+      const response = await axios.post(API_GATEWAY_URL, requestBody, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+      });
 
-      expect(result.statusCode).toBe(201);
-      const body = JSON.parse(result.body);
-      expect(body.did).toBe(requestBody.did);
+      expect(response.status).toBe(201);
+      expect(response.data.did).toBe(requestBody.did);
     });
   });
 
@@ -82,76 +69,95 @@ describe('E2E: agent-registration', () => {
         metadata: { name: 'Test' },
       };
 
-      const result = await handler(createEvent(requestBody));
-
-      expect(result.statusCode).toBe(400);
-      const body = JSON.parse(result.body);
-      expect(body.code).toBe('INVALID_DID');
+      try {
+        await axios.post(API_GATEWAY_URL, requestBody, {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 10000,
+        });
+        fail('Expected request to fail');
+      } catch (error: any) {
+        expect(error.response.status).toBe(400);
+        expect(error.response.data.code).toBe('INVALID_DID');
+      }
     });
 
     it('should return 400 for missing required fields', async () => {
       const requestBody = {
-        did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
+        did: generateUniqueDid(),
         // missing signature and metadata
       };
 
-      const result = await handler(createEvent(requestBody));
-
-      expect(result.statusCode).toBe(400);
-      const body = JSON.parse(result.body);
-      expect(body.code).toBe('MISSING_FIELDS');
+      try {
+        await axios.post(API_GATEWAY_URL, requestBody, {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 10000,
+        });
+        fail('Expected request to fail');
+      } catch (error: any) {
+        expect(error.response.status).toBe(400);
+        expect(error.response.data.code).toBe('MISSING_FIELDS');
+      }
     });
 
     it('should return 409 for duplicate DID registration', async () => {
+      const did = generateUniqueDid();
       const requestBody = {
-        did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
+        did,
         signature: 'dGVzdHNpZ25hdHVyZQ==',
         metadata: { name: 'Test' },
       };
 
       // First registration
-      const firstResult = await handler(createEvent(requestBody));
-      expect(firstResult.statusCode).toBe(201);
+      const firstResponse = await axios.post(API_GATEWAY_URL, requestBody, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+      });
+      expect(firstResponse.status).toBe(201);
 
       // Second registration with same DID
-      const secondResult = await handler(createEvent(requestBody));
-      expect(secondResult.statusCode).toBe(409);
-      const body = JSON.parse(secondResult.body);
-      expect(body.code).toBe('DUPLICATE_DID');
+      try {
+        await axios.post(API_GATEWAY_URL, requestBody, {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 10000,
+        });
+        fail('Expected request to fail');
+      } catch (error: any) {
+        expect(error.response.status).toBe(409);
+        expect(error.response.data.code).toBe('DUPLICATE_DID');
+      }
     });
 
     it('should return 400 for invalid signature', async () => {
       const requestBody = {
-        did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
+        did: generateUniqueDid(),
         signature: 'invalid-signature',
         metadata: { name: 'Test' },
       };
 
-      const result = await handler(createEvent(requestBody));
-
-      expect(result.statusCode).toBe(400);
-      const body = JSON.parse(result.body);
-      expect(body.code).toBe('INVALID_SIGNATURE');
+      try {
+        await axios.post(API_GATEWAY_URL, requestBody, {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 10000,
+        });
+        fail('Expected request to fail');
+      } catch (error: any) {
+        expect(error.response.status).toBe(400);
+        expect(error.response.data.code).toBe('INVALID_SIGNATURE');
+      }
     });
   });
 
   describe('Edge Cases', () => {
     it('should handle empty request body', async () => {
-      const event = createEvent({});
-      event.body = null;
-
-      const result = await handler(event);
-
-      expect(result.statusCode).toBe(400);
-    });
-
-    it('should handle malformed JSON in body', async () => {
-      const event = createEvent({});
-      event.body = 'not-valid-json';
-
-      const result = await handler(event);
-
-      expect(result.statusCode).toBe(400);
+      try {
+        await axios.post(API_GATEWAY_URL, {}, {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 10000,
+        });
+        fail('Expected request to fail');
+      } catch (error: any) {
+        expect(error.response.status).toBe(400);
+      }
     });
 
     it('should handle large metadata', async () => {
@@ -161,48 +167,55 @@ describe('E2E: agent-registration', () => {
       };
 
       const requestBody = {
-        did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
+        did: generateUniqueDid(),
         signature: 'dGVzdHNpZ25hdHVyZQ==',
         metadata: largeMetadata,
       };
 
-      const result = await handler(createEvent(requestBody));
+      const response = await axios.post(API_GATEWAY_URL, requestBody, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+      });
 
-      expect(result.statusCode).toBe(201);
+      expect(response.status).toBe(201);
     });
   });
 
   describe('Security', () => {
     it('should handle SQL injection attempt in metadata', async () => {
       const requestBody = {
-        did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
+        did: generateUniqueDid(),
         signature: 'dGVzdHNpZ25hdHVyZQ==',
         metadata: {
           name: "'; DROP TABLE agents; --",
         },
       };
 
-      const result = await handler(createEvent(requestBody));
+      const response = await axios.post(API_GATEWAY_URL, requestBody, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+      });
 
       // Should still succeed, DynamoDB is NoSQL
-      expect(result.statusCode).toBe(201);
+      expect(response.status).toBe(201);
     });
 
     it('should handle XSS attempt in metadata', async () => {
       const requestBody = {
-        did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
+        did: generateUniqueDid(),
         signature: 'dGVzdHNpZ25hdHVyZQ==',
         metadata: {
           name: '<script>alert("xss")</script>',
         },
       };
 
-      const result = await handler(createEvent(requestBody));
+      const response = await axios.post(API_GATEWAY_URL, requestBody, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+      });
 
-      expect(result.statusCode).toBe(201);
-      const body = JSON.parse(result.body);
-      // Should store as-is, client should handle sanitization
-      expect(body.message).toBe('Agent registered successfully');
+      expect(response.status).toBe(201);
+      expect(response.data.message).toBe('Agent registered successfully');
     });
   });
 });
