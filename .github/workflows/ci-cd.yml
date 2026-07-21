@@ -178,70 +178,11 @@ jobs:
 
       - name: Update Lambda function code
         run: |
-          FUNCTION_NAME="ainx-agent-registration-sit"
-          ZIP_FILE="functions/agent-registration/dist/index.zip"
-          
-          echo "Updating Lambda function code..."
-          aws lambda update-function-code \
-            --function-name "$FUNCTION_NAME" \
-            --zip-file "fileb://${ZIP_FILE}"
+          ./scripts/update-lambda.sh ainx-agent-registration-sit functions/agent-registration/dist/index.zip
 
       - name: Create or update API Gateway
         run: |
-          API_NAME="ainx-api-sit"
-          FUNCTION_NAME="ainx-agent-registration-sit"
-          STAGE_NAME="sit"
-          
-          # Get Lambda function ARN
-          LAMBDA_ARN=$(aws lambda get-function --function-name "$FUNCTION_NAME" --query 'Configuration.FunctionArn' --output text)
-          
-          # Check if API Gateway exists
-          API_ID=$(aws apigateway get-rest-apis --query "items[?name=='$API_NAME'].id" --output text)
-          
-          if [ -z "$API_ID" ]; then
-            echo "Creating API Gateway..."
-            
-            # Create REST API
-            API_ID=$(aws apigateway create-rest-api --name "$API_NAME" --query 'id' --output text)
-            echo "Created API Gateway with ID: $API_ID"
-            
-            # Wait a moment for API to be ready
-            sleep 2
-            
-            # Get root resource id - use items[0].id for new APIs
-            ROOT_RESOURCE_ID=$(aws apigateway get-resources --rest-api-id "$API_ID" --query 'items[0].id' --output text)
-            echo "Root resource ID: $ROOT_RESOURCE_ID"
-            
-            # Create /agents resource
-            AGENTS_RESOURCE_ID=$(aws apigateway create-resource --rest-api-id "$API_ID" --parent-id "$ROOT_RESOURCE_ID" --path-part "agents" --query 'id' --output text)
-            echo "Created /agents resource with ID: $AGENTS_RESOURCE_ID"
-            
-            # Create /register resource
-            REGISTER_RESOURCE_ID=$(aws apigateway create-resource --rest-api-id "$API_ID" --parent-id "$AGENTS_RESOURCE_ID" --path-part "register" --query 'id' --output text)
-            echo "Created /register resource with ID: $REGISTER_RESOURCE_ID"
-            
-            # Create POST method
-            aws apigateway put-method --rest-api-id "$API_ID" --resource-id "$REGISTER_RESOURCE_ID" --http-method POST --authorization-type NONE
-            echo "Created POST method"
-            
-            # Create Lambda integration
-            aws apigateway put-integration --rest-api-id "$API_ID" --resource-id "$REGISTER_RESOURCE_ID" --http-method POST --type AWS_PROXY --integration-http-method POST --uri "arn:aws:apigateway:${{ env.AWS_REGION }}:lambda:path/2015-03-31/functions/${LAMBDA_ARN}/invocations"
-            echo "Created Lambda integration"
-            
-            # Create deployment
-            aws apigateway create-deployment --rest-api-id "$API_ID" --stage-name "$STAGE_NAME"
-            echo "Created deployment to stage: $STAGE_NAME"
-            
-            # Add Lambda permission for API Gateway
-            ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-            aws lambda add-permission --function-name "$FUNCTION_NAME" --statement-id apigateway-invoke --action lambda:InvokeFunction --principal apigateway.amazonaws.com --source-arn "arn:aws:execute-api:${{ env.AWS_REGION }}:${ACCOUNT_ID}:${API_ID}/*/POST/agents/register" || true
-            
-            echo "API Gateway created: https://${API_ID}.execute-api.${{ env.AWS_REGION }}.amazonaws.com/${STAGE_NAME}"
-          else
-            echo "API Gateway already exists: $API_ID"
-          fi
-          
-          echo "API_GATEWAY_ID=$API_ID" >> $GITHUB_ENV
+          ./scripts/setup-api-gateway.sh ainx-api-sit ainx-agent-registration-sit sit ${{ env.AWS_REGION }}
 
   # Deploy jobs - disabled until SIT is verified
   # deploy-uat:
@@ -251,7 +192,7 @@ jobs:
   #   environment: uat
   #   strategy:
   #     matrix:
-  #       function: [hello-world, agent-registration]
+  #       function: [agent-registration]
   #   steps:
   #     - uses: actions/checkout@v4
   #
@@ -272,16 +213,7 @@ jobs:
   #       run: |
   #         FUNCTION_NAME="ainx-${{ matrix.function }}-uat"
   #         ZIP_FILE="functions/${{ matrix.function }}/dist/index.zip"
-  #         
-  #         echo "Deploying ${{ matrix.function }} to UAT..."
-  #         
-  #         if aws lambda get-function --function-name "$FUNCTION_NAME" > /dev/null 2>&1; then
-  #           aws lambda update-function-code \
-  #             --function-name "$FUNCTION_NAME" \
-  #             --zip-file "fileb://${ZIP_FILE}"
-  #         else
-  #           echo "Function $FUNCTION_NAME does not exist. Skipping..."
-  #         fi
+  #         ./scripts/deploy-lambda.sh "$FUNCTION_NAME" "$ZIP_FILE"
   #
   # deploy-prod:
   #   runs-on: ubuntu-latest
@@ -290,7 +222,7 @@ jobs:
   #   environment: production
   #   strategy:
   #     matrix:
-  #       function: [hello-world, agent-registration]
+  #       function: [agent-registration]
   #   steps:
   #     - uses: actions/checkout@v4
   #
@@ -311,13 +243,4 @@ jobs:
   #       run: |
   #         FUNCTION_NAME="ainx-${{ matrix.function }}-prod"
   #         ZIP_FILE="functions/${{ matrix.function }}/dist/index.zip"
-  #         
-  #         echo "Deploying ${{ matrix.function }} to Production..."
-  #         
-  #         if aws lambda get-function --function-name "$FUNCTION_NAME" > /dev/null 2>&1; then
-  #           aws lambda update-function-code \
-  #             --function-name "$FUNCTION_NAME" \
-  #             --zip-file "fileb://${ZIP_FILE}"
-  #         else
-  #           echo "Function $FUNCTION_NAME does not exist. Skipping..."
-  #         fi
+  #         ./scripts/deploy-lambda.sh "$FUNCTION_NAME" "$ZIP_FILE"
