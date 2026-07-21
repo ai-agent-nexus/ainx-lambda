@@ -160,9 +160,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build]
     if: github.event_name == 'pull_request'
-    strategy:
-      matrix:
-        function: [agent-registration]
     steps:
       - uses: actions/checkout@v4
 
@@ -176,31 +173,23 @@ jobs:
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
-          name: ${{ matrix.function }}-build
-          path: functions/${{ matrix.function }}/dist/
+          name: agent-registration-build
+          path: functions/agent-registration/dist/
 
-      - name: List downloaded files
-        run: |
-          echo "Contents of functions/${{ matrix.function }}/dist/:"
-          ls -la functions/${{ matrix.function }}/dist/
+      - name: Setup SAM CLI
+        uses: aws-actions/setup-sam@v2
 
-      - name: Deploy ${{ matrix.function }} to SIT
+      - name: Deploy to SIT using SAM
         run: |
-          FUNCTION_NAME="ainx-${{ matrix.function }}-sit"
-          ZIP_FILE="functions/${{ matrix.function }}/dist/index.zip"
-          
-          echo "Deploying ${{ matrix.function }} to SIT..."
-          
-          # Check if function exists
-          if aws lambda get-function --function-name "$FUNCTION_NAME" > /dev/null 2>&1; then
-            # Update existing function
-            aws lambda update-function-code \
-              --function-name "$FUNCTION_NAME" \
-              --zip-file "fileb://${ZIP_FILE}"
-          else
-            echo "Function $FUNCTION_NAME does not exist. Skipping..."
-            echo "Note: First-time deployment requires manual creation via SAM/Console"
-          fi
+          sam deploy \
+            --template-file infra/templates/template.yaml \
+            --stack-name ainx-sit \
+            --s3-bucket ainx-sam-deployments-${{ secrets.AWS_ACCOUNT_ID }} \
+            --region ${{ env.AWS_REGION }} \
+            --capabilities CAPABILITY_IAM \
+            --parameter-overrides Stage=sit \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset
 
   # Deploy jobs - disabled until SIT is verified
   # deploy-uat:
