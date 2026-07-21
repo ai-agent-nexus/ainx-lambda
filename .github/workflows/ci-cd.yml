@@ -147,6 +147,8 @@ jobs:
         run: |
           cd functions/${{ matrix.function }}
           npm run build
+          cd dist
+          zip -r index.zip index.js
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
@@ -176,6 +178,11 @@ jobs:
         with:
           name: ${{ matrix.function }}-build
           path: functions/${{ matrix.function }}/dist/
+
+      - name: List downloaded files
+        run: |
+          echo "Contents of functions/${{ matrix.function }}/dist/:"
+          ls -la functions/${{ matrix.function }}/dist/
 
       - name: Deploy ${{ matrix.function }} to SIT
         run: |
