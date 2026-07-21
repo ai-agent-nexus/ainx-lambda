@@ -201,8 +201,7 @@ jobs:
       - name: Run E2E tests
         run: |
           echo "Running E2E tests against $API_URL"
-          cd functions/agent-registration
-          npm run test:e2e
+          npx jest --config jest.config.js --testPathPattern=e2e
         env:
           API_GATEWAY_URL: ${{ env.API_URL }}
 
