@@ -202,7 +202,7 @@ jobs:
         run: |
           echo "Running E2E tests against $API_URL"
           npm install
-          npx jest --config jest.config.js --testPathPatterns=e2e
+          npx jest --config jest.e2e.config.js
         env:
           API_GATEWAY_URL: ${{ env.API_URL }}
 
