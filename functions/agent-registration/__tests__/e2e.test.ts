@@ -19,16 +19,15 @@ describe('E2E: agent-registration', () => {
   // Generate a valid did:key with proper signature
   const generateValidDid = () => {
     // Generate an ed25519 key pair
-    const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');;
-    
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+
     // Get the raw public key bytes (32 bytes for ed25519)
-    const publicKeyBytes = publicKey.export({ format: 'jwk' });
     // For ed25519, we need to extract the raw 32-byte key
     // Node.js crypto doesn't directly expose raw bytes, so we'll use a workaround
     const publicKeyDer = publicKey.export({ type: 'spki', format: 'der' });
     // ed25519 SPKI format: 12 byte header + 32 byte key
     const rawPublicKey = publicKeyDer.slice(-32);
-    
+
     // Encode public key to base58
     const base58Chars = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
     let encoded = '';
@@ -41,15 +40,15 @@ describe('E2E: agent-registration', () => {
     for (let i = 0; i < rawPublicKey.length && rawPublicKey[i] === 0; i++) {
       encoded = '1' + encoded;
     }
-    
+
     const did = `did:key:z6Mk${encoded}`;
-    
+
     // Create a signer function that signs messages
     const signMessage = (message: string): string => {
       const signature = crypto.sign(null, Buffer.from(message), privateKey);
       return signature.toString('base64');
     };
-    
+
     return { did, signMessage };
   };
 
@@ -62,7 +61,7 @@ describe('E2E: agent-registration', () => {
       };
       const message = JSON.stringify({ did, metadata });
       const signature = signMessage(message);
-      
+
       const requestBody = {
         did,
         signature,
@@ -86,7 +85,7 @@ describe('E2E: agent-registration', () => {
       const metadata = {};
       const message = JSON.stringify({ did, metadata });
       const signature = signMessage(message);
-      
+
       const requestBody = {
         did,
         signature,
@@ -148,7 +147,7 @@ describe('E2E: agent-registration', () => {
       const metadata = { name: 'Test' };
       const message = JSON.stringify({ did, metadata });
       const signature = signMessage(message);
-      
+
       const requestBody = {
         did,
         signature,
@@ -225,7 +224,7 @@ describe('E2E: agent-registration', () => {
       const { did, signMessage } = generateValidDid();
       const message = JSON.stringify({ did, metadata: largeMetadata });
       const signature = signMessage(message);
-      
+
       const requestBody = {
         did,
         signature,
@@ -249,7 +248,7 @@ describe('E2E: agent-registration', () => {
       };
       const message = JSON.stringify({ did, metadata });
       const signature = signMessage(message);
-      
+
       const requestBody = {
         did,
         signature,
@@ -272,7 +271,7 @@ describe('E2E: agent-registration', () => {
       };
       const message = JSON.stringify({ did, metadata });
       const signature = signMessage(message);
-      
+
       const requestBody = {
         did,
         signature,
