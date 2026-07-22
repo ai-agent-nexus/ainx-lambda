@@ -15,10 +15,20 @@ import axios from 'axios';
 const API_GATEWAY_URL = process.env.API_GATEWAY_URL || 'http://localhost:3000/agents/register';
 
 describe('E2E: agent-registration', () => {
-  // Helper to generate a unique DID for each test
   const generateUniqueDid = () => {
-    const randomId = Math.random().toString(36).substring(2, 15);
-    return `did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ${randomId}`;
+    const crypto = require('crypto');
+    const publicKey = crypto.randomBytes(32);
+    const base58Chars = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+    let encoded = '';
+    let num = BigInt('0x' + publicKey.toString('hex'));
+    while (num > 0) {
+      encoded = base58Chars[Number(num % BigInt(58))] + encoded;
+      num = num / BigInt(58);
+    }
+    for (let i = 0; i < publicKey.length && publicKey[i] === 0; i++) {
+      encoded = '1' + encoded;
+    }
+    return `did:key:z6Mk${encoded}`;
   };
 
   describe('Happy Path', () => {
