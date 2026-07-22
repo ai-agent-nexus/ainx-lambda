@@ -16,30 +16,57 @@ import crypto from 'crypto';
 const API_GATEWAY_URL = process.env.API_GATEWAY_URL || 'http://localhost:3000/agents/register';
 
 describe('E2E: agent-registration', () => {
-  const generateUniqueDid = () => {
-    const publicKey = crypto.randomBytes(32);
+  // Generate a valid did:key with proper signature
+  const generateValidDid = () => {
+    // Generate an ed25519 key pair
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');;
+    
+    // Get the raw public key bytes (32 bytes for ed25519)
+    const publicKeyBytes = publicKey.export({ format: 'jwk' });
+    // For ed25519, we need to extract the raw 32-byte key
+    // Node.js crypto doesn't directly expose raw bytes, so we'll use a workaround
+    const publicKeyDer = publicKey.export({ type: 'spki', format: 'der' });
+    // ed25519 SPKI format: 12 byte header + 32 byte key
+    const rawPublicKey = publicKeyDer.slice(-32);
+    
+    // Encode public key to base58
     const base58Chars = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
     let encoded = '';
-    let num = BigInt('0x' + publicKey.toString('hex'));
+    let num = BigInt('0x' + rawPublicKey.toString('hex'));
     while (num > 0) {
       encoded = base58Chars[Number(num % BigInt(58))] + encoded;
       num = num / BigInt(58);
     }
-    for (let i = 0; i < publicKey.length && publicKey[i] === 0; i++) {
+    // Add leading zeros (represented as '1' in base58)
+    for (let i = 0; i < rawPublicKey.length && rawPublicKey[i] === 0; i++) {
       encoded = '1' + encoded;
     }
-    return `did:key:z6Mk${encoded}`;
+    
+    const did = `did:key:z6Mk${encoded}`;
+    
+    // Create a signer function that signs messages
+    const signMessage = (message: string): string => {
+      const signature = crypto.sign(null, Buffer.from(message), privateKey);
+      return signature.toString('base64');
+    };
+    
+    return { did, signMessage };
   };
 
   describe('Happy Path', () => {
     it('should successfully register a new agent with valid did:key', async () => {
+      const { did, signMessage } = generateValidDid();
+      const metadata = {
+        name: 'Test Agent',
+        description: 'A test agent for E2E testing',
+      };
+      const message = JSON.stringify({ did, metadata });
+      const signature = signMessage(message);
+      
       const requestBody = {
-        did: generateUniqueDid(),
-        signature: 'dGVzdHNpZ25hdHVyZQ==',
-        metadata: {
-          name: 'Test Agent',
-          description: 'A test agent for E2E testing',
-        },
+        did,
+        signature,
+        metadata,
       };
 
       const response = await axios.post(API_GATEWAY_URL, requestBody, {
@@ -55,10 +82,15 @@ describe('E2E: agent-registration', () => {
     });
 
     it('should accept minimal metadata', async () => {
+      const { did, signMessage } = generateValidDid();
+      const metadata = {};
+      const message = JSON.stringify({ did, metadata });
+      const signature = signMessage(message);
+      
       const requestBody = {
-        did: generateUniqueDid(),
-        signature: 'dGVzdHNpZ25hdHVyZQ==',
-        metadata: {},
+        did,
+        signature,
+        metadata,
       };
 
       const response = await axios.post(API_GATEWAY_URL, requestBody, {
@@ -94,7 +126,7 @@ describe('E2E: agent-registration', () => {
 
     it('should return 400 for missing required fields', async () => {
       const requestBody = {
-        did: generateUniqueDid(),
+        did: generateValidDid().did,
         // missing signature and metadata
       };
 
@@ -112,11 +144,15 @@ describe('E2E: agent-registration', () => {
     });
 
     it('should return 409 for duplicate DID registration', async () => {
-      const did = generateUniqueDid();
+      const { did, signMessage } = generateValidDid();
+      const metadata = { name: 'Test' };
+      const message = JSON.stringify({ did, metadata });
+      const signature = signMessage(message);
+      
       const requestBody = {
         did,
-        signature: 'dGVzdHNpZ25hdHVyZQ==',
-        metadata: { name: 'Test' },
+        signature,
+        metadata,
       };
 
       // First registration
@@ -141,8 +177,9 @@ describe('E2E: agent-registration', () => {
     });
 
     it('should return 400 for invalid signature', async () => {
+      const { did } = generateValidDid();
       const requestBody = {
-        did: generateUniqueDid(),
+        did,
         signature: 'invalid-signature',
         metadata: { name: 'Test' },
       };
@@ -185,9 +222,13 @@ describe('E2E: agent-registration', () => {
         data: 'x'.repeat(10000),
       };
 
+      const { did, signMessage } = generateValidDid();
+      const message = JSON.stringify({ did, metadata: largeMetadata });
+      const signature = signMessage(message);
+      
       const requestBody = {
-        did: generateUniqueDid(),
-        signature: 'dGVzdHNpZ25hdHVyZQ==',
+        did,
+        signature,
         metadata: largeMetadata,
       };
 
@@ -202,12 +243,17 @@ describe('E2E: agent-registration', () => {
 
   describe('Security', () => {
     it('should handle SQL injection attempt in metadata', async () => {
+      const { did, signMessage } = generateValidDid();
+      const metadata = {
+        name: "'; DROP TABLE agents; --",
+      };
+      const message = JSON.stringify({ did, metadata });
+      const signature = signMessage(message);
+      
       const requestBody = {
-        did: generateUniqueDid(),
-        signature: 'dGVzdHNpZ25hdHVyZQ==',
-        metadata: {
-          name: "'; DROP TABLE agents; --",
-        },
+        did,
+        signature,
+        metadata,
       };
 
       const response = await axios.post(API_GATEWAY_URL, requestBody, {
@@ -220,12 +266,17 @@ describe('E2E: agent-registration', () => {
     });
 
     it('should handle XSS attempt in metadata', async () => {
+      const { did, signMessage } = generateValidDid();
+      const metadata = {
+        name: '<script>alert("xss")</script>',
+      };
+      const message = JSON.stringify({ did, metadata });
+      const signature = signMessage(message);
+      
       const requestBody = {
-        did: generateUniqueDid(),
-        signature: 'dGVzdHNpZ25hdHVyZQ==',
-        metadata: {
-          name: '<script>alert("xss")</script>',
-        },
+        did,
+        signature,
+        metadata,
       };
 
       const response = await axios.post(API_GATEWAY_URL, requestBody, {
