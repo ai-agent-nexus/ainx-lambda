@@ -22,26 +22,28 @@ describe('E2E: agent-registration', () => {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
 
     // Get the raw public key bytes (32 bytes for ed25519)
-    // For ed25519, we need to extract the raw 32-byte key
-    // Node.js crypto doesn't directly expose raw bytes, so we'll use a workaround
+    // Node.js crypto doesn't directly expose raw bytes, so we extract from SPKI DER format
     const publicKeyDer = publicKey.export({ type: 'spki', format: 'der' });
     // ed25519 SPKI format: 12 byte header + 32 byte key
     const rawPublicKey = publicKeyDer.slice(-32);
 
-    // Encode public key to base58
+    // Encode public key to base58 with multicodec prefix (0xed 0x01 for Ed25519)
+    const multicodecPrefix = Buffer.from([0xed, 0x01]);
+    const dataWithPrefix = Buffer.concat([multicodecPrefix, rawPublicKey]);
+
     const base58Chars = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
     let encoded = '';
-    let num = BigInt('0x' + rawPublicKey.toString('hex'));
+    let num = BigInt('0x' + dataWithPrefix.toString('hex'));
     while (num > 0) {
       encoded = base58Chars[Number(num % BigInt(58))] + encoded;
       num = num / BigInt(58);
     }
     // Add leading zeros (represented as '1' in base58)
-    for (let i = 0; i < rawPublicKey.length && rawPublicKey[i] === 0; i++) {
+    for (let i = 0; i < dataWithPrefix.length && dataWithPrefix[i] === 0; i++) {
       encoded = '1' + encoded;
     }
 
-    const did = `did:key:z6Mk${encoded}`;
+    const did = `did:key:z${encoded}`;
 
     // Create a signer function that signs messages
     const signMessage = (message: string): string => {
