@@ -1,4 +1,5 @@
 import axios from 'axios';
+import crypto from 'crypto';
 
 /**
  * E2E Tests for agent-registration
@@ -16,7 +17,6 @@ const API_GATEWAY_URL = process.env.API_GATEWAY_URL || 'http://localhost:3000/ag
 
 describe('E2E: agent-registration', () => {
   const generateUniqueDid = () => {
-    const crypto = require('crypto');
     const publicKey = crypto.randomBytes(32);
     const base58Chars = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
     let encoded = '';
