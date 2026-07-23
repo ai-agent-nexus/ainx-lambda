@@ -8,9 +8,9 @@ import { verifySignature } from '@ainx/crypto-utils';
 
 const logger = new Logger('agent-registration');
 const dynamodb = new DynamoDB.DocumentClient();
-const TABLE_NAME = process.env.AGENT_REGISTRATION_TABLE_NAME!;
-const DID_UNIQUENESS_TABLE_NAME = process.env.DID_UNIQUENESS_TABLE_NAME!;
-const NONCE_TABLE_NAME = process.env.NONCE_TABLE_NAME!;
+const TABLE_NAME = process.env.AGENT_REGISTRATION_TABLE_NAME;
+const DID_UNIQUENESS_TABLE_NAME = process.env.DID_UNIQUENESS_TABLE_NAME;
+const NONCE_TABLE_NAME = process.env.NONCE_TABLE_NAME;
 
 if (!TABLE_NAME || !DID_UNIQUENESS_TABLE_NAME || !NONCE_TABLE_NAME) {
   throw new Error('Required environment variables are missing');
