@@ -67,7 +67,7 @@ Resources:
     Properties:
       FunctionName: !Sub 'ainx-agent-registration-${Stage}'
       Handler: index.handler
-      CodeUri: ../functions/agent-registration/dist/
+      CodeUri: ./functions/agent-registration/dist/
       Description: Agent registration Lambda function
       Environment:
         Variables:
