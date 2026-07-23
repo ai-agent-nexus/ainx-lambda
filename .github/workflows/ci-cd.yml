@@ -160,6 +160,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build]
     if: github.event_name == 'pull_request'
+    environment: sit
     steps:
       - uses: actions/checkout@v4
 
@@ -178,7 +179,7 @@ jobs:
 
       - name: Update Lambda function code
         run: |
-          ./scripts/update-lambda.sh ainx-agent-registration-sit functions/agent-registration/dist/index.zip
+          ./scripts/update-lambda.sh ainx-agent-registration-sit functions/agent-registration/dist/index.zip ${{ vars.AGENT_REGISTRATION_TABLE_NAME }}
 
       - name: Get API Gateway URL
         id: get-api-url
