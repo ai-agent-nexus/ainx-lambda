@@ -24,9 +24,6 @@ Parameters:
       - sit
       - staging
       - prod
-  LambdaCodeBucket:
-    Type: String
-    Default: ainx-lambda-code
 
 Conditions:
   IsProd: !Equals [!Ref Stage, 'prod']
@@ -70,7 +67,7 @@ Resources:
     Properties:
       FunctionName: !Sub 'ainx-agent-registration-${Stage}'
       Handler: index.handler
-      CodeUri: s3://${LambdaCodeBucket}/ainx-agent-registration-${Stage}/index.zip
+      CodeUri: ./functions/agent-registration/dist/
       Description: Agent registration Lambda function
       Environment:
         Variables:
