@@ -193,7 +193,12 @@ jobs:
 
       - name: Update Lambda function code
         run: |
-          ./scripts/update-lambda.sh ainx-agent-registration-sit functions/agent-registration/dist/index.zip ${{ vars.AGENT_REGISTRATION_TABLE_NAME }}
+          ./scripts/update-lambda.sh \
+            ainx-agent-registration-sit \
+            functions/agent-registration/dist/index.zip \
+            ${{ vars.AGENT_REGISTRATION_TABLE_NAME }} \
+            ${{ vars.DID_UNIQUENESS_TABLE_NAME }} \
+            ${{ vars.NONCE_TABLE_NAME }}
 
       - name: Get API Gateway URL
         id: get-api-url
