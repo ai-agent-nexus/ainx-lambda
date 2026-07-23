@@ -171,6 +171,10 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Upload Lambda code to S3
+        run: |
+          aws s3 cp functions/agent-registration/dist/index.zip s3://${{ vars.LAMBDA_CODE_BUCKET }}/ainx-agent-registration-sit/index.zip
+
       - name: Deploy CloudFormation template
         run: |
           aws cloudformation deploy \
