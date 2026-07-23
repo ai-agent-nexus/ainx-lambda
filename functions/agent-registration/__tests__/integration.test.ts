@@ -1,4 +1,6 @@
 process.env.AGENT_REGISTRATION_TABLE_NAME = 'test-agent-registration-table';
+process.env.DID_UNIQUENESS_TABLE_NAME = 'test-did-uniqueness-table';
+process.env.NONCE_TABLE_NAME = 'test-nonce-table';
 
 import { APIGatewayProxyEvent } from 'aws-lambda';
 import { handler } from '../src/index';
@@ -70,6 +72,36 @@ jest.mock('aws-sdk', () => ({
             return Promise.reject(error);
           }
           dynamoDBState.set(did, params.Item);
+          return Promise.resolve({});
+        }),
+      })),
+      query: jest.fn(() => ({
+        promise: jest.fn().mockResolvedValue({ Items: [] }),
+      })),
+      transactWrite: jest.fn((params: { TransactItems: any[] }) => ({
+        promise: jest.fn().mockImplementation(() => {
+          const items = params.TransactItems;
+          const allDids = [];
+          for (const item of items) {
+            if (item.Put?.Item?.did) {
+              allDids.push(item.Put.Item.did);
+            }
+          }
+          
+          for (const did of allDids) {
+            if (dynamoDBState.has(did)) {
+              const error = new Error('Transaction cancelled');
+              (error as Error & { name: string }).name = 'TransactionCanceledException';
+              return Promise.reject(error);
+            }
+          }
+          
+          for (const item of items) {
+            if (item.Put?.Item?.did) {
+              dynamoDBState.set(item.Put.Item.did, item.Put.Item);
+            }
+          }
+          
           return Promise.resolve({});
         }),
       })),
