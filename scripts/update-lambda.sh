@@ -16,6 +16,10 @@ aws lambda update-function-code \
 
 echo "Lambda function updated successfully."
 
+# Wait for Lambda to be Active before updating configuration
+echo "Waiting for Lambda function to be active..."
+aws lambda wait function-updated --function-name "$FUNCTION_NAME"
+
 # Update environment variables
 echo "Updating Lambda environment variables..."
 aws lambda update-function-configuration \
