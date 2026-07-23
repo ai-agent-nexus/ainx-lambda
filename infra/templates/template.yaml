@@ -21,6 +21,7 @@ Parameters:
     Default: dev
     AllowedValues:
       - dev
+      - sit
       - staging
       - prod
 
@@ -30,6 +31,11 @@ Conditions:
 Mappings:
   StageConfig:
     dev:
+      ReadMinCapacity: 1
+      ReadMaxCapacity: 10
+      WriteMinCapacity: 1
+      WriteMaxCapacity: 5
+    sit:
       ReadMinCapacity: 1
       ReadMaxCapacity: 10
       WriteMinCapacity: 1
