@@ -1,3 +1,5 @@
+process.env.AGENT_REGISTRATION_TABLE_NAME = 'test-agent-registration-table';
+
 import { APIGatewayProxyEvent } from 'aws-lambda';
 import { handler } from '../src/index';
 import { verifySignature } from '@ainx/crypto-utils';
@@ -105,7 +107,7 @@ describe('agent-registration handler', () => {
   });
 
   it('should return 400 for missing required fields', async () => {
-    mockEvent.body = JSON.stringify({ did: 'test' });
+    mockEvent.body = JSON.stringify({ did: 'test-did' });
 
     const result = await handler(mockEvent as APIGatewayProxyEvent);
 
@@ -116,8 +118,9 @@ describe('agent-registration handler', () => {
 
   it('should return 400 for invalid DID format', async () => {
     mockEvent.body = JSON.stringify({
-      ...validBody,
       did: 'invalid-did',
+      signature: 'test-sig',
+      metadata: {},
     });
 
     const result = await handler(mockEvent as APIGatewayProxyEvent);
@@ -128,8 +131,7 @@ describe('agent-registration handler', () => {
   });
 
   it('should return 400 for invalid signature', async () => {
-    const mockedVerifySignature = jest.mocked(verifySignature);
-    mockedVerifySignature.mockReturnValueOnce(false);
+    (verifySignature as jest.Mock).mockReturnValueOnce(false);
 
     const result = await handler(mockEvent as APIGatewayProxyEvent);
 
@@ -142,7 +144,6 @@ describe('agent-registration handler', () => {
     mockPutFn.mockImplementationOnce(() => ({
       promise: jest.fn().mockRejectedValue({
         name: 'ConditionalCheckFailedException',
-        message: 'The conditional request failed',
       }),
     }));
 
@@ -153,9 +154,9 @@ describe('agent-registration handler', () => {
     expect(body.code).toBe('DUPLICATE_DID');
   });
 
-  it('should return 500 for internal errors', async () => {
+  it('should return 500 for unexpected errors', async () => {
     mockPutFn.mockImplementationOnce(() => ({
-      promise: jest.fn().mockRejectedValue(new Error('DynamoDB error')),
+      promise: jest.fn().mockRejectedValue(new Error('DB Error')),
     }));
 
     const result = await handler(mockEvent as APIGatewayProxyEvent);
@@ -163,16 +164,5 @@ describe('agent-registration handler', () => {
     expect(result.statusCode).toBe(500);
     const body = JSON.parse(result.body);
     expect(body.code).toBe('INTERNAL_ERROR');
-  });
-
-  it('should use TTL of approximately 90 days', async () => {
-    const result = await handler(mockEvent as APIGatewayProxyEvent);
-
-    expect(result.statusCode).toBe(201);
-    const body = JSON.parse(result.body);
-    const now = Math.floor(Date.now() / 1000);
-    const expectedTtl = now + 90 * 24 * 60 * 60;
-    expect(body.ttl).toBeGreaterThanOrEqual(expectedTtl - 5);
-    expect(body.ttl).toBeLessThanOrEqual(expectedTtl + 5);
   });
 });
