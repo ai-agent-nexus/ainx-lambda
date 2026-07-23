@@ -63,15 +63,22 @@ Resources:
       Handler: index.handler
       CodeUri: ../functions/agent-registration/dist/
       Description: Agent registration Lambda function
-      MemorySize: 128
       Environment:
         Variables:
           AGENT_REGISTRATION_TABLE_NAME: !Ref AgentRegistrationTable
+          DID_UNIQUENESS_TABLE_NAME: !Ref DidUniquenessTable
+          NONCE_TABLE_NAME: !Ref NonceTable
       Events:
         AgentRegistrationApi:
           Type: Api
           Properties:
             Path: /agents/register
+            Method: POST
+            RestApiId: !Ref ApiGateway
+        RotateKeyApi:
+          Type: Api
+          Properties:
+            Path: /agents/rotate-key
             Method: POST
             RestApiId: !Ref ApiGateway
       Policies:
@@ -82,7 +89,14 @@ Resources:
               Action:
                 - dynamodb:PutItem
                 - dynamodb:GetItem
-              Resource: !GetAtt AgentRegistrationTable.Arn
+                - dynamodb:UpdateItem
+                - dynamodb:Query
+                - dynamodb:TransactWriteItems
+              Resource: 
+                - !GetAtt AgentRegistrationTable.Arn
+                - !Sub "${AgentRegistrationTable.Arn}/index/*"
+                - !GetAtt DidUniquenessTable.Arn
+                - !GetAtt NonceTable.Arn
 
   AgentRegistrationErrorAlarm:
     Type: AWS::CloudWatch::Alarm
@@ -125,11 +139,27 @@ Resources:
         ReadCapacityUnits: 1
         WriteCapacityUnits: 1
       AttributeDefinitions:
+        - AttributeName: userId
+          AttributeType: S
         - AttributeName: did
           AttributeType: S
+        - AttributeName: status
+          AttributeType: S
       KeySchema:
-        - AttributeName: did
+        - AttributeName: userId
           KeyType: HASH
+        - AttributeName: did
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: DidIndex
+          KeySchema:
+            - AttributeName: did
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput:
+            ReadCapacityUnits: 1
+            WriteCapacityUnits: 1
       TimeToLiveSpecification:
         AttributeName: ttl
         Enabled: true
@@ -139,6 +169,56 @@ Resources:
         SSEEnabled: true
         SSEType: KMS
         KMSMasterKeyId: alias/aws/dynamodb
+      Tags:
+        - Key: Project
+          Value: AINX
+        - Key: Environment
+          Value: !Ref Stage
+        - Key: Service
+          Value: agent-registration
+
+  DidUniquenessTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'ainx-did-uniqueness-${Stage}'
+      BillingMode: PROVISIONED
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      AttributeDefinitions:
+        - AttributeName: did
+          AttributeType: S
+      KeySchema:
+        - AttributeName: did
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      Tags:
+        - Key: Project
+          Value: AINX
+        - Key: Environment
+          Value: !Ref Stage
+        - Key: Service
+          Value: agent-registration
+
+  NonceTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'ainx-nonce-${Stage}'
+      BillingMode: PROVISIONED
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      AttributeDefinitions:
+        - AttributeName: nonce
+          AttributeType: S
+      KeySchema:
+        - AttributeName: nonce
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
       Tags:
         - Key: Project
           Value: AINX
@@ -184,6 +264,48 @@ Resources:
       PolicyName: !Sub 'ainx-agent-registration-write-scaling-${Stage}'
       PolicyType: TargetTrackingScaling
       ScalingTargetId: !Ref AgentRegistrationTableWriteScalingTarget
+      TargetTrackingScalingPolicyConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: DynamoDBWriteCapacityUtilization
+        TargetValue: 70.0
+
+  DidUniquenessTableReadScalingTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      MaxCapacity: !FindInMap [StageConfig, !Ref Stage, ReadMaxCapacity]
+      MinCapacity: !FindInMap [StageConfig, !Ref Stage, ReadMinCapacity]
+      ResourceId: !Sub 'table/${DidUniquenessTable}'
+      RoleARN: !GetAtt DynamoDBAutoScalingRole.Arn
+      ScalableDimension: dynamodb:table:ReadCapacityUnits
+      ServiceNamespace: dynamodb
+
+  DidUniquenessTableReadScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub 'ainx-did-uniqueness-read-scaling-${Stage}'
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref DidUniquenessTableReadScalingTarget
+      TargetTrackingScalingPolicyConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: DynamoDBReadCapacityUtilization
+        TargetValue: 70.0
+
+  DidUniquenessTableWriteScalingTarget:
+    Type: AWS::ApplicationAutoScaling::ScalableTarget
+    Properties:
+      MaxCapacity: !FindInMap [StageConfig, !Ref Stage, WriteMaxCapacity]
+      MinCapacity: !FindInMap [StageConfig, !Ref Stage, WriteMinCapacity]
+      ResourceId: !Sub 'table/${DidUniquenessTable}'
+      RoleARN: !GetAtt DynamoDBAutoScalingRole.Arn
+      ScalableDimension: dynamodb:table:WriteCapacityUnits
+      ServiceNamespace: dynamodb
+
+  DidUniquenessTableWriteScalingPolicy:
+    Type: AWS::ApplicationAutoScaling::ScalingPolicy
+    Properties:
+      PolicyName: !Sub 'ainx-did-uniqueness-write-scaling-${Stage}'
+      PolicyType: TargetTrackingScaling
+      ScalingTargetId: !Ref DidUniquenessTableWriteScalingTarget
       TargetTrackingScalingPolicyConfiguration:
         PredefinedMetricSpecification:
           PredefinedMetricType: DynamoDBWriteCapacityUtilization
