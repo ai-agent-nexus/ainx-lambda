@@ -171,6 +171,20 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
+      - name: Deploy CloudFormation template
+        run: |
+          aws cloudformation deploy \
+            --template-file infra/templates/template.yaml \
+            --stack-name ainx-sit \
+            --parameter-overrides Stage=sit \
+            --capabilities CAPABILITY_IAM \
+            --no-fail-on-empty-changeset
+
+      - name: Wait for CloudFormation deployment
+        run: |
+          aws cloudformation wait stack-update-complete \
+            --stack-name ainx-sit
+
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
