@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces",
-    "test": "npm run test --workspaces",
+    "test": "jest",
     "test:coverage": "jest --coverage",
     "test:integration": "jest --testPathPattern=integration",
     "lint": "eslint . --ext .ts,.js",
@@ -18,14 +18,18 @@
     "format:check": "prettier --check \"**/*.{ts,js,json,md}\"",
     "clean": "npm run clean --workspaces && rm -rf node_modules",
     "deploy:all": "npm run deploy --workspaces",
-    "deploy:changed": "node scripts/deploy-changed.js"
+    "deploy:changed": "node scripts/deploy-changed.js",
+    "deploy:agent-registration": "cd functions/agent-registration && npm run build && npm run package && aws lambda update-function-code --function-name agent-registration --zip-file fileb://dist/index.zip"
   },
   "devDependencies": {
+    "@ainx/crypto-utils": "*",
+    "@ainx/did-utils": "*",
     "@types/aws-lambda": "^8.10.149",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.15.0",
     "@typescript-eslint/eslint-plugin": "^8.31.0",
     "@typescript-eslint/parser": "^8.31.0",
+    "axios": "^1.18.1",
     "esbuild": "^0.25.0",
     "eslint": "^9.25.0",
     "eslint-config-prettier": "^10.1.0",

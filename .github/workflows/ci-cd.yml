@@ -54,8 +54,24 @@ jobs:
       - name: Check formatting
         run: npm run format:check
 
-  # Test all packages with coverage
-  test:
+  # Type check
+  type-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run TypeScript compiler
+        run: npx tsc --noEmit
+
+  unit-test:
     runs-on: ubuntu-latest
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.packages == 'true' || needs.detect-changes.outputs.functions == 'true' }}
@@ -79,14 +95,43 @@ jobs:
           files: ./coverage/lcov.info
           fail_ci_if_error: false
 
+  # Integration tests
+  integration-test:
+    runs-on: ubuntu-latest
+    needs: detect-changes
+    if: ${{ needs.detect-changes.outputs.functions == 'true' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Run integration tests
+        run: npm run test:integration
+
+  # Security scan
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run npm audit
+        run: npm audit --audit-level=moderate
+        continue-on-error: true
+
   # Build affected functions
   build:
     runs-on: ubuntu-latest
-    needs: [detect-changes, lint]
+    needs: [detect-changes, lint, unit-test]
     if: ${{ needs.detect-changes.outputs.functions == 'true' }}
     strategy:
       matrix:
-        function: [hello-world]
+        function: [agent-registration]
     steps:
       - uses: actions/checkout@v4
 
@@ -102,9 +147,132 @@ jobs:
         run: |
           cd functions/${{ matrix.function }}
           npm run build
+          cd dist
+          zip -r index.zip index.js
 
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.function }}-build
           path: functions/${{ matrix.function }}/dist/
+
+  deploy-sit:
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: github.event_name == 'pull_request'
+    environment: sit
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: agent-registration-build
+          path: functions/agent-registration/dist/
+
+      - name: Update Lambda function code
+        run: |
+          ./scripts/update-lambda.sh ainx-agent-registration-sit functions/agent-registration/dist/index.zip ${{ vars.AGENT_REGISTRATION_TABLE_NAME }}
+
+      - name: Get API Gateway URL
+        id: get-api-url
+        run: |
+          API_ID=$(aws apigateway get-rest-apis --query "items[?name=='ainx-api-sit'].id" --output text)
+          if [ -n "$API_ID" ]; then
+            API_URL="https://${API_ID}.execute-api.${{ env.AWS_REGION }}.amazonaws.com/sit/agents/register"
+            echo "API_URL=$API_URL" >> $GITHUB_ENV
+            echo "api_url=$API_URL" >> $GITHUB_OUTPUT
+            echo "API Gateway URL: $API_URL"
+          else
+            echo "Error: API Gateway not found"
+            exit 1
+          fi
+
+      - name: Deploy API Gateway to sit stage
+        run: |
+          API_ID=$(aws apigateway get-rest-apis --query "items[?name=='ainx-api-sit'].id" --output text)
+          if [ -n "$API_ID" ]; then
+            aws apigateway create-deployment \
+              --rest-api-id $API_ID \
+              --stage-name sit
+            echo "API Gateway deployed to sit stage"
+          else
+            echo "Error: API Gateway not found"
+            exit 1
+          fi
+
+      - name: Run E2E tests
+        run: |
+          echo "Running E2E tests against $API_URL"
+          npm install
+          npx jest --config jest.e2e.config.js
+        env:
+          API_GATEWAY_URL: ${{ env.API_URL }}
+
+  # Deploy jobs - disabled until SIT is verified
+  # deploy-uat:
+  #   runs-on: ubuntu-latest
+  #   needs: [build]
+  #   if: github.ref == 'refs/heads/main'
+  #   environment: uat
+  #   strategy:
+  #     matrix:
+  #       function: [agent-registration]
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #
+  #     - name: Configure AWS credentials
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  #         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  #         aws-region: ${{ env.AWS_REGION }}
+  #
+  #     - name: Download build artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: ${{ matrix.function }}-build
+  #         path: functions/${{ matrix.function }}/dist/
+  #
+  #     - name: Deploy ${{ matrix.function }} to UAT
+  #       run: |
+  #         FUNCTION_NAME="ainx-${{ matrix.function }}-uat"
+  #         ZIP_FILE="functions/${{ matrix.function }}/dist/index.zip"
+  #         ./scripts/deploy-lambda.sh "$FUNCTION_NAME" "$ZIP_FILE"
+  #
+  # deploy-prod:
+  #   runs-on: ubuntu-latest
+  #   needs: [build]
+  #   if: startsWith(github.ref, 'refs/tags/v')
+  #   environment: production
+  #   strategy:
+  #     matrix:
+  #       function: [agent-registration]
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #
+  #     - name: Configure AWS credentials
+  #       uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+  #         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+  #         aws-region: ${{ env.AWS_REGION }}
+  #
+  #     - name: Download build artifacts
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: ${{ matrix.function }}-build
+  #         path: functions/${{ matrix.function }}/dist/
+  #
+  #     - name: Deploy ${{ matrix.function }} to Production
+  #       run: |
+  #         FUNCTION_NAME="ainx-${{ matrix.function }}-prod"
+  #         ZIP_FILE="functions/${{ matrix.function }}/dist/index.zip"
+  #         ./scripts/deploy-lambda.sh "$FUNCTION_NAME" "$ZIP_FILE"
