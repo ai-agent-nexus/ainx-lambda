@@ -263,7 +263,7 @@ describe('E2E: agent-registration', () => {
       expect(registerResponse.status).toBe(201);
 
       // Generate new DID
-      const { did: newDid, signMessage: newSignMessage } = generateValidDid();
+      const { did: newDid } = generateValidDid();
       const timestamp = Math.floor(Date.now() / 1000);
       const nonce = crypto.randomUUID();
 
@@ -323,14 +323,10 @@ describe('E2E: agent-registration', () => {
       };
 
       try {
-        await axios.post(
-          API_GATEWAY_URL.replace('/register', '/rotate-key'),
-          rotateBody,
-          {
-            headers: { 'Content-Type': 'application/json' },
-            timeout: 10000,
-          }
-        );
+        await axios.post(API_GATEWAY_URL.replace('/register', '/rotate-key'), rotateBody, {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 10000,
+        });
         throw new Error('Expected request to fail');
       } catch (error: unknown) {
         const axiosError = error as { response?: { status: number; data: { code: string } } };
@@ -372,14 +368,10 @@ describe('E2E: agent-registration', () => {
       };
 
       try {
-        await axios.post(
-          API_GATEWAY_URL.replace('/register', '/rotate-key'),
-          rotateBody,
-          {
-            headers: { 'Content-Type': 'application/json' },
-            timeout: 10000,
-          }
-        );
+        await axios.post(API_GATEWAY_URL.replace('/register', '/rotate-key'), rotateBody, {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 10000,
+        });
         throw new Error('Expected request to fail');
       } catch (error: unknown) {
         const axiosError = error as { response?: { status: number; data: { code: string } } };
@@ -421,25 +413,17 @@ describe('E2E: agent-registration', () => {
       };
 
       // First rotate should succeed
-      await axios.post(
-        API_GATEWAY_URL.replace('/register', '/rotate-key'),
-        rotateBody,
-        {
-          headers: { 'Content-Type': 'application/json' },
-          timeout: 10000,
-        }
-      );
+      await axios.post(API_GATEWAY_URL.replace('/register', '/rotate-key'), rotateBody, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+      });
 
       // Second rotate with same nonce should fail
       try {
-        await axios.post(
-          API_GATEWAY_URL.replace('/register', '/rotate-key'),
-          rotateBody,
-          {
-            headers: { 'Content-Type': 'application/json' },
-            timeout: 10000,
-          }
-        );
+        await axios.post(API_GATEWAY_URL.replace('/register', '/rotate-key'), rotateBody, {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 10000,
+        });
         throw new Error('Expected request to fail');
       } catch (error: unknown) {
         const axiosError = error as { response?: { status: number; data: { code: string } } };
@@ -602,8 +586,8 @@ describe('E2E: agent-registration', () => {
       });
 
       // Try concurrent rotations
-      const { did: newDid1, signMessage: signMessage1 } = generateValidDid();
-      const { did: newDid2, signMessage: signMessage2 } = generateValidDid();
+      const { did: newDid1 } = generateValidDid();
+      const { did: newDid2 } = generateValidDid();
 
       const timestamp = Math.floor(Date.now() / 1000);
       const nonce1 = crypto.randomUUID();
@@ -647,17 +631,15 @@ describe('E2E: agent-registration', () => {
       ]);
 
       // One should succeed, one should fail
-      const successCount = [result1, result2].filter(
-        (r) => r.status === 'fulfilled'
-      ).length;
-      const failureCount = [result1, result2].filter(
-        (r) => r.status === 'rejected'
-      ).length;
+      const successCount = [result1, result2].filter((r) => r.status === 'fulfilled').length;
+      const failureCount = [result1, result2].filter((r) => r.status === 'rejected').length;
 
       expect(successCount).toBe(1);
       expect(failureCount).toBe(1);
     });
   });
+
+  describe('Security', () => {
     it('should handle SQL injection attempt in metadata', async () => {
       const { did, signMessage } = generateValidDid();
       const metadata = {
