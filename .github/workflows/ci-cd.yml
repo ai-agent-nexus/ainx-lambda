@@ -131,7 +131,7 @@ jobs:
     if: ${{ needs.detect-changes.outputs.functions == 'true' }}
     strategy:
       matrix:
-        function: [agent-registration]
+        function: [agent-registration, auth, agent-rotate-key]
     steps:
       - uses: actions/checkout@v4
 
@@ -171,17 +171,44 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
-      - name: Download build artifacts
+      - name: Download agent-registration build artifacts
         uses: actions/download-artifact@v4
         with:
           name: agent-registration-build
           path: functions/agent-registration/dist/
 
-      - name: Update Lambda function code
+      - name: Download auth build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: auth-build
+          path: functions/auth/dist/
+
+      - name: Download agent-rotate-key build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: agent-rotate-key-build
+          path: functions/agent-rotate-key/dist/
+
+      - name: Update agent-registration Lambda function code
         run: |
           ./scripts/update-lambda.sh \
             ainx-agent-registration-sit \
             functions/agent-registration/dist/index.zip \
+            ${{ vars.AGENT_REGISTRATION_TABLE_NAME }} \
+            ${{ vars.DID_UNIQUENESS_TABLE_NAME }}
+
+      - name: Update auth Lambda function code
+        run: |
+          ./scripts/update-lambda.sh \
+            ainx-auth-sit \
+            functions/auth/dist/index.zip \
+            ${{ vars.AGENT_REGISTRATION_TABLE_NAME }}
+
+      - name: Update agent-rotate-key Lambda function code
+        run: |
+          ./scripts/update-lambda.sh \
+            ainx-agent-rotate-key-sit \
+            functions/agent-rotate-key/dist/index.zip \
             ${{ vars.AGENT_REGISTRATION_TABLE_NAME }} \
             ${{ vars.DID_UNIQUENESS_TABLE_NAME }} \
             ${{ vars.NONCE_TABLE_NAME }}

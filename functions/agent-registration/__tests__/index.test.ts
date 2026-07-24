@@ -1,6 +1,5 @@
 process.env.AGENT_REGISTRATION_TABLE_NAME = 'test-agent-registration-table';
 process.env.DID_UNIQUENESS_TABLE_NAME = 'test-did-uniqueness-table';
-process.env.NONCE_TABLE_NAME = 'test-nonce-table';
 
 import { APIGatewayProxyEvent } from 'aws-lambda';
 import { handler } from '../src/index';
@@ -92,7 +91,6 @@ describe('agent-registration handler', () => {
     };
     process.env.AGENT_REGISTRATION_TABLE_NAME = 'test-table';
     process.env.DID_UNIQUENESS_TABLE_NAME = 'test-did-uniqueness';
-    process.env.NONCE_TABLE_NAME = 'test-nonce';
   });
 
   afterEach(() => {
@@ -100,44 +98,12 @@ describe('agent-registration handler', () => {
   });
 
   describe('Routing', () => {
-    it('should route to register handler for POST /agents/register', async () => {
+    it('should handle POST /agents/register', async () => {
       const result = await handler(mockEvent as APIGatewayProxyEvent);
 
       expect(result.statusCode).toBe(201);
       const body = JSON.parse(result.body);
       expect(body.message).toBe('Agent registered successfully');
-    });
-
-    it('should route to rotate-key handler for POST /agents/rotate-key', async () => {
-      mockEvent.path = '/agents/rotate-key';
-      mockEvent.body = JSON.stringify({
-        oldDid: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
-        newDid: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
-        signature: 'dGVzdHNpZ25hdHVyZQ==',
-        timestamp: Math.floor(Date.now() / 1000),
-        nonce: 'test-nonce',
-      });
-
-      mockQueryFn.mockImplementationOnce(() => ({
-        promise: jest.fn().mockResolvedValue({
-          Items: [
-            {
-              userId: 'test-user-id',
-              did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
-              status: 'active',
-              metadata: { name: 'Test Agent' },
-              didHistory: [],
-              registeredAt: new Date().toISOString(),
-            },
-          ],
-        }),
-      }));
-
-      const result = await handler(mockEvent as APIGatewayProxyEvent);
-
-      expect(result.statusCode).toBe(200);
-      const body = JSON.parse(result.body);
-      expect(body.message).toBe('Key rotated successfully');
     });
 
     it('should return 404 for unknown routes', async () => {
@@ -231,207 +197,6 @@ describe('agent-registration handler', () => {
       expect(result.statusCode).toBe(500);
       const body = JSON.parse(result.body);
       expect(body.code).toBe('INTERNAL_ERROR');
-    });
-  });
-
-  describe('Rotate Key', () => {
-    const rotateKeyBody = {
-      oldDid: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
-      newDid: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CY',
-      signature: 'dGVzdHNpZ25hdHVyZQ==',
-      timestamp: Math.floor(Date.now() / 1000),
-      nonce: 'test-nonce',
-    };
-
-    beforeEach(() => {
-      mockEvent.path = '/agents/rotate-key';
-      mockEvent.body = JSON.stringify(rotateKeyBody);
-    });
-
-    it('should return 200 on successful key rotation', async () => {
-      mockQueryFn.mockImplementationOnce(() => ({
-        promise: jest.fn().mockResolvedValue({
-          Items: [
-            {
-              userId: 'test-user-id',
-              did: rotateKeyBody.oldDid,
-              status: 'active',
-              metadata: { name: 'Test Agent' },
-              didHistory: [],
-              registeredAt: new Date().toISOString(),
-            },
-          ],
-        }),
-      }));
-
-      const result = await handler(mockEvent as APIGatewayProxyEvent);
-
-      expect(result.statusCode).toBe(200);
-      const body = JSON.parse(result.body);
-      expect(body.message).toBe('Key rotated successfully');
-      expect(body.did).toBe(rotateKeyBody.newDid);
-    });
-
-    it('should return 400 for expired timestamp', async () => {
-      mockEvent.body = JSON.stringify({
-        ...rotateKeyBody,
-        timestamp: Math.floor(Date.now() / 1000) - 400,
-      });
-
-      const result = await handler(mockEvent as APIGatewayProxyEvent);
-
-      expect(result.statusCode).toBe(400);
-      const body = JSON.parse(result.body);
-      expect(body.code).toBe('TIMESTAMP_EXPIRED');
-    });
-
-    it('should return 400 for reused nonce', async () => {
-      mockPutFn.mockImplementationOnce(() => ({
-        promise: jest.fn().mockRejectedValue({
-          name: 'ConditionalCheckFailedException',
-        }),
-      }));
-
-      const result = await handler(mockEvent as APIGatewayProxyEvent);
-
-      expect(result.statusCode).toBe(400);
-      const body = JSON.parse(result.body);
-      expect(body.code).toBe('REUSED_NONCE');
-    });
-
-    it('should return 400 for revoked DID', async () => {
-      mockQueryFn.mockImplementationOnce(() => ({
-        promise: jest.fn().mockResolvedValue({
-          Items: [],
-        }),
-      }));
-
-      const result = await handler(mockEvent as APIGatewayProxyEvent);
-
-      expect(result.statusCode).toBe(400);
-      const body = JSON.parse(result.body);
-      expect(body.code).toBe('DID_REVOKED');
-    });
-
-    it('should return 409 for duplicate new DID', async () => {
-      mockQueryFn.mockImplementationOnce(() => ({
-        promise: jest.fn().mockResolvedValue({
-          Items: [
-            {
-              userId: 'test-user-id',
-              did: rotateKeyBody.oldDid,
-              status: 'active',
-              metadata: { name: 'Test Agent' },
-              didHistory: [],
-              registeredAt: new Date().toISOString(),
-            },
-          ],
-        }),
-      }));
-
-      mockQueryFn.mockImplementationOnce(() => ({
-        promise: jest.fn().mockResolvedValue({
-          Items: [
-            {
-              userId: 'another-user-id',
-              did: rotateKeyBody.newDid,
-              status: 'active',
-            },
-          ],
-        }),
-      }));
-
-      const result = await handler(mockEvent as APIGatewayProxyEvent);
-
-      expect(result.statusCode).toBe(409);
-      const body = JSON.parse(result.body);
-      expect(body.code).toBe('DUPLICATE_DID');
-    });
-
-    it('should return 409 for concurrent modification', async () => {
-      mockQueryFn.mockImplementationOnce(() => ({
-        promise: jest.fn().mockResolvedValue({
-          Items: [
-            {
-              userId: 'test-user-id',
-              did: rotateKeyBody.oldDid,
-              status: 'active',
-              metadata: { name: 'Test Agent' },
-              didHistory: [],
-              registeredAt: new Date().toISOString(),
-            },
-          ],
-        }),
-      }));
-
-      mockQueryFn.mockImplementationOnce(() => ({
-        promise: jest.fn().mockResolvedValue({
-          Items: [],
-        }),
-      }));
-
-      mockTransactWriteFn.mockImplementationOnce(() => ({
-        promise: jest.fn().mockRejectedValue({
-          name: 'TransactionCanceledException',
-        }),
-      }));
-
-      const result = await handler(mockEvent as APIGatewayProxyEvent);
-
-      expect(result.statusCode).toBe(409);
-      const body = JSON.parse(result.body);
-      expect(body.code).toBe('CONCURRENT_MODIFICATION');
-    });
-
-    it('should return 400 for invalid signature', async () => {
-      (verifySignature as jest.Mock).mockReturnValueOnce(false);
-
-      const result = await handler(mockEvent as APIGatewayProxyEvent);
-
-      expect(result.statusCode).toBe(400);
-      const body = JSON.parse(result.body);
-      expect(body.code).toBe('INVALID_SIGNATURE');
-    });
-
-    it('should return 400 for invalid old DID format', async () => {
-      mockEvent.body = JSON.stringify({
-        ...rotateKeyBody,
-        oldDid: 'invalid-did',
-      });
-
-      const result = await handler(mockEvent as APIGatewayProxyEvent);
-
-      expect(result.statusCode).toBe(400);
-      const body = JSON.parse(result.body);
-      expect(body.code).toBe('INVALID_DID');
-    });
-
-    it('should return 400 for invalid new DID format', async () => {
-      mockQueryFn.mockImplementationOnce(() => ({
-        promise: jest.fn().mockResolvedValue({
-          Items: [
-            {
-              userId: 'test-user-id',
-              did: rotateKeyBody.oldDid,
-              status: 'active',
-              metadata: { name: 'Test Agent' },
-              didHistory: [],
-              registeredAt: new Date().toISOString(),
-            },
-          ],
-        }),
-      }));
-
-      mockEvent.body = JSON.stringify({
-        ...rotateKeyBody,
-        newDid: 'invalid-did',
-      });
-
-      const result = await handler(mockEvent as APIGatewayProxyEvent);
-
-      expect(result.statusCode).toBe(400);
-      const body = JSON.parse(result.body);
-      expect(body.code).toBe('INVALID_DID');
     });
   });
 

@@ -61,6 +61,14 @@ Resources:
         AllowHeaders: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'''
         AllowOrigin: '''*'''
       TracingEnabled: true
+      Auth:
+        Authorizers:
+          DIDAuthorizer:
+            FunctionArn: !GetAtt AuthFunction.Arn
+            Identity:
+              Header: Authorization
+              ValidationExpression: ^did:key:.+$
+              ReauthorizeEvery: 300
 
   AgentRegistrationFunction:
     Type: AWS::Serverless::Function
@@ -73,7 +81,6 @@ Resources:
         Variables:
           AGENT_REGISTRATION_TABLE_NAME: !Ref AgentRegistrationTable
           DID_UNIQUENESS_TABLE_NAME: !Ref DidUniquenessTable
-          NONCE_TABLE_NAME: !Ref NonceTable
       Events:
         AgentRegistrationApi:
           Type: Api
@@ -81,12 +88,61 @@ Resources:
             Path: /agents/register
             Method: POST
             RestApiId: !Ref ApiGateway
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:GetItem
+                - dynamodb:TransactWriteItems
+              Resource: 
+                - !GetAtt AgentRegistrationTable.Arn
+                - !GetAtt DidUniquenessTable.Arn
+
+  AuthFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'ainx-auth-${Stage}'
+      Handler: index.handler
+      CodeUri: ./functions/auth/dist/
+      Description: Auth Lambda function for DID verification
+      Environment:
+        Variables:
+          AGENT_REGISTRATION_TABLE_NAME: !Ref AgentRegistrationTable
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+              Resource: 
+                - !GetAtt AgentRegistrationTable.Arn
+                - !Sub "${AgentRegistrationTable.Arn}/index/*"
+
+  AgentRotateKeyFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'ainx-agent-rotate-key-${Stage}'
+      Handler: index.handler
+      CodeUri: ./functions/agent-rotate-key/dist/
+      Description: Agent rotate-key Lambda function
+      Environment:
+        Variables:
+          AGENT_REGISTRATION_TABLE_NAME: !Ref AgentRegistrationTable
+          DID_UNIQUENESS_TABLE_NAME: !Ref DidUniquenessTable
+          NONCE_TABLE_NAME: !Ref NonceTable
+      Events:
         RotateKeyApi:
           Type: Api
           Properties:
             Path: /agents/rotate-key
             Method: POST
             RestApiId: !Ref ApiGateway
+            Auth:
+              Authorizer: DIDAuthorizer
       Policies:
         - AWSLambdaBasicExecutionRole
         - Version: '2012-10-17'
@@ -120,6 +176,38 @@ Resources:
         - Name: FunctionName
           Value: !Ref AgentRegistrationFunction
 
+  AuthErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'ainx-auth-errors-${Stage}'
+      AlarmDescription: Alarm when auth function error rate exceeds 1%
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AuthFunction
+
+  AgentRotateKeyErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'ainx-agent-rotate-key-errors-${Stage}'
+      AlarmDescription: Alarm when agent-rotate-key function error rate exceeds 1%
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AgentRotateKeyFunction
+
   AgentRegistrationThrottlingAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
@@ -135,6 +223,38 @@ Resources:
       Dimensions:
         - Name: FunctionName
           Value: !Ref AgentRegistrationFunction
+
+  AuthThrottlingAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'ainx-auth-throttling-${Stage}'
+      AlarmDescription: Alarm when auth function is throttled
+      MetricName: Throttles
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AuthFunction
+
+  AgentRotateKeyThrottlingAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'ainx-agent-rotate-key-throttling-${Stage}'
+      AlarmDescription: Alarm when agent-rotate-key function is throttled
+      MetricName: Throttles
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AgentRotateKeyFunction
 
   AgentRegistrationTable:
     Type: AWS::DynamoDB::Table
@@ -338,3 +458,11 @@ Outputs:
   AgentRegistrationFunctionArn:
     Description: Agent Registration Lambda function ARN
     Value: !GetAtt AgentRegistrationFunction.Arn
+  
+  AuthFunctionArn:
+    Description: Auth Lambda function ARN
+    Value: !GetAtt AuthFunction.Arn
+  
+  AgentRotateKeyFunctionArn:
+    Description: Agent Rotate Key Lambda function ARN
+    Value: !GetAtt AgentRotateKeyFunction.Arn
