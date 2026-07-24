@@ -58,11 +58,13 @@ async function authenticate(token: string): Promise<{
   error?: string;
 }> {
   const parts = token.split(':');
-  if (parts.length !== 3) {
+  if (parts.length < 3) {
     return { valid: false, error: 'Invalid token format' };
   }
 
-  const [did, signature, timestampStr] = parts;
+  const timestampStr = parts.pop()!;
+  const signature = parts.pop()!;
+  const did = parts.join(':');
 
   const timestamp = parseInt(timestampStr, 10);
   if (isNaN(timestamp)) {

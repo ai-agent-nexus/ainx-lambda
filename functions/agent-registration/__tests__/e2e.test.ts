@@ -5,17 +5,19 @@ import crypto from 'crypto';
  * E2E Tests for agent-registration
  *
  * These tests call the actual API Gateway endpoint to verify end-to-end functionality.
- * Run with: API_GATEWAY_URL=<url> npm run test:e2e
+ * Run with: REGISTER_URL=<url> npm run test:e2e
  *
  * Requirements:
- * - API_GATEWAY_URL environment variable pointing to the deployed API Gateway
+ * - REGISTER_URL environment variable pointing to the deployed API Gateway
  * - AWS credentials for the test environment
  */
 
 // Get API Gateway URL from environment or use default
-const API_GATEWAY_URL = process.env.API_GATEWAY_URL || 'http://localhost:3000/agents/register';
+const API_BASE_URL = process.env.REGISTER_URL || 'http://localhost:3000';
+const REGISTER_URL = `${API_BASE_URL}/agents/register`;
+const ROTATE_KEY_URL = `${API_BASE_URL}/agents/rotate-key`;
 
-describe('E2E: agent-registration', () => {
+describe('E2E: agent-registration & agent-rotate-key', () => {
   // Generate a valid did:key with proper signature
   const generateValidDid = () => {
     // Generate an ed25519 key pair
@@ -70,7 +72,7 @@ describe('E2E: agent-registration', () => {
         metadata,
       };
 
-      const response = await axios.post(API_GATEWAY_URL, requestBody, {
+      const response = await axios.post(REGISTER_URL, requestBody, {
         headers: { 'Content-Type': 'application/json' },
         timeout: 10000,
       });
@@ -94,7 +96,7 @@ describe('E2E: agent-registration', () => {
         metadata,
       };
 
-      const response = await axios.post(API_GATEWAY_URL, requestBody, {
+      const response = await axios.post(REGISTER_URL, requestBody, {
         headers: { 'Content-Type': 'application/json' },
         timeout: 10000,
       });
@@ -113,7 +115,7 @@ describe('E2E: agent-registration', () => {
       };
 
       try {
-        await axios.post(API_GATEWAY_URL, requestBody, {
+        await axios.post(REGISTER_URL, requestBody, {
           headers: { 'Content-Type': 'application/json' },
           timeout: 10000,
         });
@@ -132,7 +134,7 @@ describe('E2E: agent-registration', () => {
       };
 
       try {
-        await axios.post(API_GATEWAY_URL, requestBody, {
+        await axios.post(REGISTER_URL, requestBody, {
           headers: { 'Content-Type': 'application/json' },
           timeout: 10000,
         });
@@ -157,7 +159,7 @@ describe('E2E: agent-registration', () => {
       };
 
       // First registration
-      const firstResponse = await axios.post(API_GATEWAY_URL, requestBody, {
+      const firstResponse = await axios.post(REGISTER_URL, requestBody, {
         headers: { 'Content-Type': 'application/json' },
         timeout: 10000,
       });
@@ -165,7 +167,7 @@ describe('E2E: agent-registration', () => {
 
       // Second registration with same DID
       try {
-        await axios.post(API_GATEWAY_URL, requestBody, {
+        await axios.post(REGISTER_URL, requestBody, {
           headers: { 'Content-Type': 'application/json' },
           timeout: 10000,
         });
@@ -186,7 +188,7 @@ describe('E2E: agent-registration', () => {
       };
 
       try {
-        await axios.post(API_GATEWAY_URL, requestBody, {
+        await axios.post(REGISTER_URL, requestBody, {
           headers: { 'Content-Type': 'application/json' },
           timeout: 10000,
         });
@@ -203,7 +205,7 @@ describe('E2E: agent-registration', () => {
     it('should handle empty request body', async () => {
       try {
         await axios.post(
-          API_GATEWAY_URL,
+          REGISTER_URL,
           {},
           {
             headers: { 'Content-Type': 'application/json' },
@@ -233,7 +235,7 @@ describe('E2E: agent-registration', () => {
         metadata: largeMetadata,
       };
 
-      const response = await axios.post(API_GATEWAY_URL, requestBody, {
+      const response = await axios.post(REGISTER_URL, requestBody, {
         headers: { 'Content-Type': 'application/json' },
         timeout: 10000,
       });
@@ -256,7 +258,7 @@ describe('E2E: agent-registration', () => {
         metadata,
       };
 
-      const registerResponse = await axios.post(API_GATEWAY_URL, registerBody, {
+      const registerResponse = await axios.post(REGISTER_URL, registerBody, {
         headers: { 'Content-Type': 'application/json' },
         timeout: 10000,
       });
@@ -279,14 +281,10 @@ describe('E2E: agent-registration', () => {
         nonce,
       };
 
-      const rotateResponse = await axios.post(
-        API_GATEWAY_URL.replace('/register', '/rotate-key'),
-        rotateBody,
-        {
-          headers: { 'Content-Type': 'application/json' },
-          timeout: 10000,
-        }
-      );
+      const rotateResponse = await axios.post(ROTATE_KEY_URL, rotateBody, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+      });
 
       expect(rotateResponse.status).toBe(200);
       expect(rotateResponse.data.message).toBe('Key rotated successfully');
@@ -305,7 +303,7 @@ describe('E2E: agent-registration', () => {
         metadata,
       };
 
-      await axios.post(API_GATEWAY_URL, registerBody, {
+      await axios.post(REGISTER_URL, registerBody, {
         headers: { 'Content-Type': 'application/json' },
         timeout: 10000,
       });
@@ -323,7 +321,7 @@ describe('E2E: agent-registration', () => {
       };
 
       try {
-        await axios.post(API_GATEWAY_URL.replace('/register', '/rotate-key'), rotateBody, {
+        await axios.post(ROTATE_KEY_URL, rotateBody, {
           headers: { 'Content-Type': 'application/json' },
           timeout: 10000,
         });
@@ -347,7 +345,7 @@ describe('E2E: agent-registration', () => {
         metadata,
       };
 
-      await axios.post(API_GATEWAY_URL, registerBody, {
+      await axios.post(REGISTER_URL, registerBody, {
         headers: { 'Content-Type': 'application/json' },
         timeout: 10000,
       });
@@ -368,7 +366,7 @@ describe('E2E: agent-registration', () => {
       };
 
       try {
-        await axios.post(API_GATEWAY_URL.replace('/register', '/rotate-key'), rotateBody, {
+        await axios.post(ROTATE_KEY_URL, rotateBody, {
           headers: { 'Content-Type': 'application/json' },
           timeout: 10000,
         });
@@ -392,7 +390,7 @@ describe('E2E: agent-registration', () => {
         metadata,
       };
 
-      await axios.post(API_GATEWAY_URL, registerBody, {
+      await axios.post(REGISTER_URL, registerBody, {
         headers: { 'Content-Type': 'application/json' },
         timeout: 10000,
       });
@@ -413,14 +411,14 @@ describe('E2E: agent-registration', () => {
       };
 
       // First rotate should succeed
-      await axios.post(API_GATEWAY_URL.replace('/register', '/rotate-key'), rotateBody, {
+      await axios.post(ROTATE_KEY_URL, rotateBody, {
         headers: { 'Content-Type': 'application/json' },
         timeout: 10000,
       });
 
       // Second rotate with same nonce should fail
       try {
-        await axios.post(API_GATEWAY_URL.replace('/register', '/rotate-key'), rotateBody, {
+        await axios.post(ROTATE_KEY_URL, rotateBody, {
           headers: { 'Content-Type': 'application/json' },
           timeout: 10000,
         });
@@ -444,7 +442,7 @@ describe('E2E: agent-registration', () => {
         metadata,
       };
 
-      await axios.post(API_GATEWAY_URL, registerBody, {
+      await axios.post(REGISTER_URL, registerBody, {
         headers: { 'Content-Type': 'application/json' },
         timeout: 10000,
       });
@@ -458,7 +456,7 @@ describe('E2E: agent-registration', () => {
       const rotateSignature1 = signMessage(rotateMessage1);
 
       await axios.post(
-        API_GATEWAY_URL.replace('/register', '/rotate-key'),
+        ROTATE_KEY_URL,
         {
           oldDid,
           newDid: intermediateDid,
@@ -482,7 +480,7 @@ describe('E2E: agent-registration', () => {
 
       try {
         await axios.post(
-          API_GATEWAY_URL.replace('/register', '/rotate-key'),
+          ROTATE_KEY_URL,
           {
             oldDid,
             newDid,
@@ -515,7 +513,7 @@ describe('E2E: agent-registration', () => {
         metadata,
       };
 
-      await axios.post(API_GATEWAY_URL, registerBody, {
+      await axios.post(REGISTER_URL, registerBody, {
         headers: { 'Content-Type': 'application/json' },
         timeout: 10000,
       });
@@ -526,7 +524,7 @@ describe('E2E: agent-registration', () => {
       const existingSignature = existingSignMessage(existingMessage);
 
       await axios.post(
-        API_GATEWAY_URL,
+        REGISTER_URL,
         {
           did: existingDid,
           signature: existingSignature,
@@ -547,7 +545,7 @@ describe('E2E: agent-registration', () => {
 
       try {
         await axios.post(
-          API_GATEWAY_URL.replace('/register', '/rotate-key'),
+          ROTATE_KEY_URL,
           {
             oldDid,
             newDid: existingDid,
@@ -580,7 +578,7 @@ describe('E2E: agent-registration', () => {
         metadata,
       };
 
-      await axios.post(API_GATEWAY_URL, registerBody, {
+      await axios.post(REGISTER_URL, registerBody, {
         headers: { 'Content-Type': 'application/json' },
         timeout: 10000,
       });
@@ -601,7 +599,7 @@ describe('E2E: agent-registration', () => {
 
       const [result1, result2] = await Promise.allSettled([
         axios.post(
-          API_GATEWAY_URL.replace('/register', '/rotate-key'),
+          ROTATE_KEY_URL,
           {
             oldDid,
             newDid: newDid1,
@@ -615,7 +613,7 @@ describe('E2E: agent-registration', () => {
           }
         ),
         axios.post(
-          API_GATEWAY_URL.replace('/register', '/rotate-key'),
+          ROTATE_KEY_URL,
           {
             oldDid,
             newDid: newDid2,
@@ -654,7 +652,7 @@ describe('E2E: agent-registration', () => {
         metadata,
       };
 
-      const response = await axios.post(API_GATEWAY_URL, requestBody, {
+      const response = await axios.post(REGISTER_URL, requestBody, {
         headers: { 'Content-Type': 'application/json' },
         timeout: 10000,
       });
@@ -677,7 +675,7 @@ describe('E2E: agent-registration', () => {
         metadata,
       };
 
-      const response = await axios.post(API_GATEWAY_URL, requestBody, {
+      const response = await axios.post(REGISTER_URL, requestBody, {
         headers: { 'Content-Type': 'application/json' },
         timeout: 10000,
       });
