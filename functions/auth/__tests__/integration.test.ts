@@ -279,7 +279,10 @@ describe('Integration: auth handler', () => {
           TableName: 'test-table',
           IndexName: 'DidIndex',
           KeyConditionExpression: 'did = :did',
-          FilterExpression: 'status = :status',
+          FilterExpression: '#status = :status',
+          ExpressionAttributeNames: {
+            '#status': 'status',
+          },
           ExpressionAttributeValues: {
             ':did': validDid,
             ':status': 'active',

@@ -158,7 +158,10 @@ async function authenticate(
       TableName: TABLE_NAME,
       IndexName: 'DidIndex',
       KeyConditionExpression: 'did = :did',
-      FilterExpression: 'status = :status',
+      FilterExpression: '#status = :status',
+      ExpressionAttributeNames: {
+        '#status': 'status',
+      },
       ExpressionAttributeValues: {
         ':did': did,
         ':status': 'active',
