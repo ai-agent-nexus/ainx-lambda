@@ -62,9 +62,11 @@ Resources:
         AllowOrigin: '''*'''
       TracingEnabled: true
       Auth:
+        DefaultAuthorizer: DIDAuthorizer
         Authorizers:
           DIDAuthorizer:
             FunctionArn: !GetAtt AuthFunction.Arn
+            FunctionPayloadType: TOKEN
             Identity:
               Header: Authorization
               ValidationExpression: ^did:key:.+$
@@ -121,6 +123,14 @@ Resources:
               Resource: 
                 - !GetAtt AgentRegistrationTable.Arn
                 - !Sub "${AgentRegistrationTable.Arn}/index/*"
+
+  AuthFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref AuthFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*/*'
 
   AgentRotateKeyFunction:
     Type: AWS::Serverless::Function
