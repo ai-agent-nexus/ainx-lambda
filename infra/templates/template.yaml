@@ -69,7 +69,7 @@ Resources:
             FunctionPayloadType: TOKEN
             Identity:
               Header: Authorization
-              ValidationExpression: ^did:key:.+$
+              ValidationExpression: ^did:key:[a-zA-Z0-9]+:[A-Za-z0-9+/=]+:\d+:[a-f0-9-]+$
               ReauthorizeEvery: 300
 
   AgentRegistrationFunction:

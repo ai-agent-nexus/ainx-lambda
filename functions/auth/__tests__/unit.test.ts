@@ -1,4 +1,5 @@
 process.env.AGENT_REGISTRATION_TABLE_NAME = 'test-table';
+process.env.NONCE_TABLE_NAME = 'test-nonce-table';
 
 import { APIGatewayTokenAuthorizerEvent } from 'aws-lambda';
 import { handler } from '../src/index';
@@ -34,10 +35,22 @@ const mockQueryFn = jest.fn((_params: unknown) => ({
   }),
 })) as jest.Mock;
 
+const mockGetFn = jest.fn((_params: unknown) => ({
+  promise: jest.fn().mockResolvedValue({
+    Item: undefined,
+  }),
+})) as jest.Mock;
+
+const mockPutFn = jest.fn((_params: unknown) => ({
+  promise: jest.fn().mockResolvedValue({}),
+})) as jest.Mock;
+
 jest.mock('aws-sdk', () => ({
   DynamoDB: {
     DocumentClient: jest.fn(() => ({
       query: (_params: unknown) => (mockQueryFn as jest.Mock)(_params),
+      get: (_params: unknown) => (mockGetFn as jest.Mock)(_params),
+      put: (_params: unknown) => (mockPutFn as jest.Mock)(_params),
     })),
   },
 }));
@@ -47,7 +60,8 @@ describe('auth handler', () => {
   const validDid = 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ';
   const validSignature = 'dGVzdHNpZ25hdHVyZQ==';
   const validTimestamp = Math.floor(Date.now() / 1000);
-  const validToken = `${validDid}:${validSignature}:${validTimestamp}`;
+  const validNonce = 'test-nonce-123';
+  const validToken = `${validDid}:${validSignature}:${validTimestamp}:${validNonce}`;
 
   beforeEach(() => {
     mockEvent = {
@@ -56,6 +70,7 @@ describe('auth handler', () => {
       authorizationToken: validToken,
     };
     process.env.AGENT_REGISTRATION_TABLE_NAME = 'test-table';
+    process.env.NONCE_TABLE_NAME = 'test-nonce-table';
     mockQueryFn.mockImplementation(() => ({
       promise: jest.fn().mockResolvedValue({
         Items: [
@@ -66,6 +81,14 @@ describe('auth handler', () => {
           },
         ],
       }),
+    }));
+    mockGetFn.mockImplementation(() => ({
+      promise: jest.fn().mockResolvedValue({
+        Item: undefined,
+      }),
+    }));
+    mockPutFn.mockImplementation(() => ({
+      promise: jest.fn().mockResolvedValue({}),
     }));
   });
 
@@ -83,8 +106,17 @@ describe('auth handler', () => {
       expect(result.policyDocument.Statement[0].Effect).toBe('Deny');
     });
 
-    it('should return deny policy for invalid token format', async () => {
-      mockEvent.authorizationToken = 'invalid-token';
+    it('should return deny policy for invalid token format (missing parts)', async () => {
+      mockEvent.authorizationToken = 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ';
+
+      const result = await handler(mockEvent as APIGatewayTokenAuthorizerEvent);
+
+      expect(result.principalId).toBe('unauthorized');
+      expect(result.policyDocument.Statement[0].Effect).toBe('Deny');
+    });
+
+    it('should return deny policy for invalid token format (wrong prefix)', async () => {
+      mockEvent.authorizationToken = 'invalid-token-format';
 
       const result = await handler(mockEvent as APIGatewayTokenAuthorizerEvent);
 
@@ -93,7 +125,7 @@ describe('auth handler', () => {
     });
 
     it('should return deny policy for invalid timestamp', async () => {
-      mockEvent.authorizationToken = `${validDid}:${validSignature}:invalid`;
+      mockEvent.authorizationToken = `${validDid}:${validSignature}:invalid:${validNonce}`;
 
       const result = await handler(mockEvent as APIGatewayTokenAuthorizerEvent);
 
@@ -103,7 +135,20 @@ describe('auth handler', () => {
 
     it('should return deny policy for expired timestamp', async () => {
       const expiredTimestamp = Math.floor(Date.now() / 1000) - 400;
-      mockEvent.authorizationToken = `${validDid}:${validSignature}:${expiredTimestamp}`;
+      mockEvent.authorizationToken = `${validDid}:${validSignature}:${expiredTimestamp}:${validNonce}`;
+
+      const result = await handler(mockEvent as APIGatewayTokenAuthorizerEvent);
+
+      expect(result.principalId).toBe('unauthorized');
+      expect(result.policyDocument.Statement[0].Effect).toBe('Deny');
+    });
+
+    it('should return deny policy for reused nonce', async () => {
+      mockGetFn.mockImplementationOnce(() => ({
+        promise: jest.fn().mockResolvedValue({
+          Item: { nonce: validNonce },
+        }),
+      }));
 
       const result = await handler(mockEvent as APIGatewayTokenAuthorizerEvent);
 
@@ -114,7 +159,7 @@ describe('auth handler', () => {
 
   describe('DID validation', () => {
     it('should return deny policy for invalid DID format', async () => {
-      mockEvent.authorizationToken = `invalid-did:${validSignature}:${validTimestamp}`;
+      mockEvent.authorizationToken = `invalid-did:${validSignature}:${validTimestamp}:${validNonce}`;
 
       const result = await handler(mockEvent as APIGatewayTokenAuthorizerEvent);
 
@@ -200,12 +245,37 @@ describe('auth handler', () => {
         })
       );
     });
+
+    it('should store nonce in NonceTable with TTL', async () => {
+      await handler(mockEvent as APIGatewayTokenAuthorizerEvent);
+
+      expect(mockPutFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          TableName: 'test-nonce-table',
+          Item: expect.objectContaining({
+            nonce: validNonce,
+            ttl: expect.any(Number),
+          }),
+        })
+      );
+    });
   });
 
   describe('Error handling', () => {
-    it('should return deny policy on unexpected error', async () => {
+    it('should return deny policy on DynamoDB query error', async () => {
       mockQueryFn.mockImplementationOnce(() => ({
         promise: jest.fn().mockRejectedValue(new Error('DB Error')),
+      }));
+
+      const result = await handler(mockEvent as APIGatewayTokenAuthorizerEvent);
+
+      expect(result.principalId).toBe('unauthorized');
+      expect(result.policyDocument.Statement[0].Effect).toBe('Deny');
+    });
+
+    it('should return deny policy on nonce validation error', async () => {
+      mockGetFn.mockImplementationOnce(() => ({
+        promise: jest.fn().mockRejectedValue(new Error('Nonce DB Error')),
       }));
 
       const result = await handler(mockEvent as APIGatewayTokenAuthorizerEvent);

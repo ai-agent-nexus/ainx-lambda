@@ -43,6 +43,18 @@ describe('E2E: auth Lambda', () => {
     return { did, signMessage };
   };
 
+  // Helper to generate Authorization token
+  const generateAuthToken = (
+    did: string,
+    signMessage: (msg: string) => string,
+    nonce: string
+  ): string => {
+    const timestamp = Math.floor(Date.now() / 1000);
+    const authMessage = `auth:${did}:${timestamp}:${nonce}`;
+    const authSignature = signMessage(authMessage);
+    return `${did}:${authSignature}:${timestamp}:${nonce}`;
+  };
+
   describe('Authentication flow', () => {
     it('should authenticate with valid token', async () => {
       const { did, signMessage } = generateValidDid();
@@ -59,25 +71,29 @@ describe('E2E: auth Lambda', () => {
       expect(registerResponse.status).toBe(201);
 
       // Create auth token
-      const timestamp = Math.floor(Date.now() / 1000);
-      const authMessage = `auth:${did}:${timestamp}`;
-      const authSignature = signMessage(authMessage);
-      const token = `${did}:${authSignature}:${timestamp}`;
+      const nonce = crypto.randomUUID();
+      const authToken = generateAuthToken(did, signMessage, nonce);
 
       // Call protected endpoint with auth token
+      const newDid = generateValidDid().did;
+      const rotateTimestamp = Math.floor(Date.now() / 1000);
+      const rotateNonce = crypto.randomUUID();
+      const rotateMessage = `POST /agents/rotate-key\nrotate:${did}:${newDid}:${rotateTimestamp}:${rotateNonce}`;
+      const rotateSignature = signMessage(rotateMessage);
+
       const rotateResponse = await axios.post(
         ROTATE_KEY_URL,
         {
           oldDid: did,
-          newDid: generateValidDid().did,
-          signature: authSignature,
-          timestamp,
-          nonce: crypto.randomUUID(),
+          newDid,
+          signature: rotateSignature,
+          timestamp: rotateTimestamp,
+          nonce: rotateNonce,
         },
         {
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
+            Authorization: authToken,
           },
           timeout: 10000,
         }
@@ -88,8 +104,8 @@ describe('E2E: auth Lambda', () => {
 
     it('should reject authentication with invalid token', async () => {
       const { did } = generateValidDid();
-      const timestamp = Math.floor(Date.now() / 1000);
-      const token = `${did}:invalid-signature:${timestamp}`;
+      const nonce = crypto.randomUUID();
+      const token = `${did}:invalid-signature:1234567890:${nonce}`;
 
       try {
         await axios.post(
@@ -98,13 +114,13 @@ describe('E2E: auth Lambda', () => {
             oldDid: did,
             newDid: generateValidDid().did,
             signature: 'invalid',
-            timestamp,
+            timestamp: Math.floor(Date.now() / 1000),
             nonce: crypto.randomUUID(),
           },
           {
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
+              Authorization: token,
             },
             timeout: 10000,
           }
@@ -131,9 +147,10 @@ describe('E2E: auth Lambda', () => {
 
       // Create expired token
       const expiredTimestamp = Math.floor(Date.now() / 1000) - 400;
-      const authMessage = `auth:${did}:${expiredTimestamp}`;
+      const nonce = crypto.randomUUID();
+      const authMessage = `auth:${did}:${expiredTimestamp}:${nonce}`;
       const authSignature = signMessage(authMessage);
-      const token = `${did}:${authSignature}:${expiredTimestamp}`;
+      const token = `${did}:${authSignature}:${expiredTimestamp}:${nonce}`;
 
       try {
         await axios.post(
@@ -148,7 +165,7 @@ describe('E2E: auth Lambda', () => {
           {
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
+              Authorization: token,
             },
             timeout: 10000,
           }
@@ -175,10 +192,14 @@ describe('E2E: auth Lambda', () => {
 
       // Rotate the key (revokes old DID)
       const { did: newDid } = generateValidDid();
-      const timestamp = Math.floor(Date.now() / 1000);
-      const nonce = crypto.randomUUID();
-      const rotateMessage = `POST /agents/rotate-key\nrotate:${oldDid}:${newDid}:${timestamp}:${nonce}`;
+      const rotateTimestamp = Math.floor(Date.now() / 1000);
+      const rotateNonce = crypto.randomUUID();
+      const rotateMessage = `POST /agents/rotate-key\nrotate:${oldDid}:${newDid}:${rotateTimestamp}:${rotateNonce}`;
       const rotateSignature = signMessage(rotateMessage);
+
+      // Generate auth token for rotate request
+      const authNonce = crypto.randomUUID();
+      const authToken = generateAuthToken(oldDid, signMessage, authNonce);
 
       await axios.post(
         ROTATE_KEY_URL,
@@ -186,20 +207,24 @@ describe('E2E: auth Lambda', () => {
           oldDid,
           newDid,
           signature: rotateSignature,
-          timestamp,
-          nonce,
+          timestamp: rotateTimestamp,
+          nonce: rotateNonce,
         },
         {
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: authToken,
+          },
           timeout: 10000,
         }
       );
 
       // Try to authenticate with revoked DID
       const authTimestamp = Math.floor(Date.now() / 1000);
-      const authMessage = `auth:${oldDid}:${authTimestamp}`;
-      const authSignature = signMessage(authMessage);
-      const token = `${oldDid}:${authSignature}:${authTimestamp}`;
+      const newAuthNonce = crypto.randomUUID();
+      const newAuthMessage = `auth:${oldDid}:${authTimestamp}:${newAuthNonce}`;
+      const newAuthSignature = signMessage(newAuthMessage);
+      const newToken = `${oldDid}:${newAuthSignature}:${authTimestamp}:${newAuthNonce}`;
 
       try {
         await axios.post(
@@ -207,14 +232,85 @@ describe('E2E: auth Lambda', () => {
           {
             oldDid,
             newDid: generateValidDid().did,
-            signature: authSignature,
+            signature: newAuthSignature,
             timestamp: authTimestamp,
             nonce: crypto.randomUUID(),
           },
           {
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${token}`,
+              Authorization: newToken,
+            },
+            timeout: 10000,
+          }
+        );
+        throw new Error('Expected request to fail');
+      } catch (error: unknown) {
+        const axiosError = error as { response?: { status: number } };
+        expect(axiosError.response?.status).toBe(401);
+      }
+    });
+
+    it('should reject authentication with reused nonce', async () => {
+      const { did, signMessage } = generateValidDid();
+      const metadata = { name: 'Test Agent' };
+      const message = JSON.stringify({ did, metadata });
+      const signature = signMessage(message);
+
+      // Register the DID
+      const registerBody = { did, signature, metadata };
+      await axios.post(REGISTER_URL, registerBody, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+      });
+
+      // Create auth token with specific nonce
+      const nonce = crypto.randomUUID();
+      const timestamp = Math.floor(Date.now() / 1000);
+      const authMessage = `auth:${did}:${timestamp}:${nonce}`;
+      const authSignature = signMessage(authMessage);
+      const token = `${did}:${authSignature}:${timestamp}:${nonce}`;
+
+      // First call should succeed
+      const newDid = generateValidDid().did;
+      const rotateTimestamp = Math.floor(Date.now() / 1000);
+      const rotateNonce = crypto.randomUUID();
+      const rotateMessage = `POST /agents/rotate-key\nrotate:${did}:${newDid}:${rotateTimestamp}:${rotateNonce}`;
+      const rotateSignature = signMessage(rotateMessage);
+
+      await axios.post(
+        ROTATE_KEY_URL,
+        {
+          oldDid: did,
+          newDid,
+          signature: rotateSignature,
+          timestamp: rotateTimestamp,
+          nonce: rotateNonce,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: token,
+          },
+          timeout: 10000,
+        }
+      );
+
+      // Second call with same nonce should fail
+      try {
+        await axios.post(
+          ROTATE_KEY_URL,
+          {
+            oldDid: did,
+            newDid: generateValidDid().did,
+            signature: rotateSignature,
+            timestamp: rotateTimestamp,
+            nonce: crypto.randomUUID(),
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: token,
             },
             timeout: 10000,
           }
@@ -265,7 +361,7 @@ describe('E2E: auth Lambda', () => {
           {
             headers: {
               'Content-Type': 'application/json',
-              Authorization: 'Bearer malformed-token',
+              Authorization: 'malformed-token',
             },
             timeout: 10000,
           }

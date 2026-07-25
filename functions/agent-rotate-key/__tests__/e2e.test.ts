@@ -17,6 +17,14 @@ const REGISTER_URL = `${API_BASE_URL}/agents/register`;
 const ROTATE_KEY_URL = `${API_BASE_URL}/agents/rotate-key`;
 
 describe('E2E: agent-rotate-key', () => {
+  const generateAuthToken = (did: string, signMessage: (msg: string) => string): string => {
+    const timestamp = Math.floor(Date.now() / 1000);
+    const nonce = crypto.randomUUID();
+    const authMessage = `auth:${did}:${timestamp}:${nonce}`;
+    const authSignature = signMessage(authMessage);
+    return `${did}:${authSignature}:${timestamp}:${nonce}`;
+  };
+
   const generateValidDid = () => {
     const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
     const publicKeyDer = publicKey.export({ type: 'spki', format: 'der' });
@@ -53,7 +61,10 @@ describe('E2E: agent-rotate-key', () => {
       // Register the DID
       const registerBody = { did: oldDid, signature, metadata };
       const registerResponse = await axios.post(REGISTER_URL, registerBody, {
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: generateAuthToken(oldDid, signMessage),
+        },
         timeout: 10000,
       });
       expect(registerResponse.status).toBe(201);
@@ -75,7 +86,10 @@ describe('E2E: agent-rotate-key', () => {
           nonce,
         },
         {
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: generateAuthToken(oldDid, signMessage),
+          },
           timeout: 10000,
         }
       );
@@ -97,7 +111,10 @@ describe('E2E: agent-rotate-key', () => {
         REGISTER_URL,
         { did: oldDid, signature, metadata },
         {
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: generateAuthToken(oldDid, signMessage),
+          },
           timeout: 10000,
         }
       );
@@ -119,7 +136,10 @@ describe('E2E: agent-rotate-key', () => {
           nonce,
         },
         {
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: generateAuthToken(oldDid, signMessage),
+          },
           timeout: 10000,
         }
       );
@@ -141,7 +161,10 @@ describe('E2E: agent-rotate-key', () => {
           nonce: nonce2,
         },
         {
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: generateAuthToken(oldDid, signMessage),
+          },
           timeout: 10000,
         }
       );
@@ -162,7 +185,10 @@ describe('E2E: agent-rotate-key', () => {
         REGISTER_URL,
         { did: oldDid, signature, metadata },
         {
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: generateAuthToken(oldDid, signMessage),
+          },
           timeout: 10000,
         }
       );
@@ -182,7 +208,10 @@ describe('E2E: agent-rotate-key', () => {
             nonce,
           },
           {
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: generateAuthToken(oldDid, signMessage),
+            },
             timeout: 10000,
           }
         );
@@ -205,7 +234,10 @@ describe('E2E: agent-rotate-key', () => {
         REGISTER_URL,
         { did: oldDid, signature, metadata },
         {
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: generateAuthToken(oldDid, signMessage),
+          },
           timeout: 10000,
         }
       );
@@ -227,7 +259,10 @@ describe('E2E: agent-rotate-key', () => {
             nonce,
           },
           {
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: generateAuthToken(oldDid, signMessage),
+            },
             timeout: 10000,
           }
         );
@@ -250,7 +285,10 @@ describe('E2E: agent-rotate-key', () => {
         REGISTER_URL,
         { did: oldDid, signature, metadata },
         {
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: generateAuthToken(oldDid, signMessage),
+          },
           timeout: 10000,
         }
       );
@@ -271,14 +309,20 @@ describe('E2E: agent-rotate-key', () => {
 
       // First rotation
       await axios.post(ROTATE_KEY_URL, rotateBody, {
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: generateAuthToken(oldDid, signMessage),
+        },
         timeout: 10000,
       });
 
       // Second rotation with same nonce
       try {
         await axios.post(ROTATE_KEY_URL, rotateBody, {
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: generateAuthToken(oldDid, signMessage),
+          },
           timeout: 10000,
         });
         throw new Error('Expected request to fail');
@@ -300,7 +344,10 @@ describe('E2E: agent-rotate-key', () => {
         REGISTER_URL,
         { did: oldDid, signature, metadata },
         {
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: generateAuthToken(oldDid, signMessage),
+          },
           timeout: 10000,
         }
       );
@@ -322,7 +369,10 @@ describe('E2E: agent-rotate-key', () => {
           nonce: nonce1,
         },
         {
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: generateAuthToken(oldDid, signMessage),
+          },
           timeout: 10000,
         }
       );
@@ -345,7 +395,10 @@ describe('E2E: agent-rotate-key', () => {
             nonce: nonce2,
           },
           {
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: generateAuthToken(oldDid, signMessage),
+            },
             timeout: 10000,
           }
         );
@@ -368,7 +421,10 @@ describe('E2E: agent-rotate-key', () => {
         REGISTER_URL,
         { did: oldDid, signature, metadata },
         {
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: generateAuthToken(oldDid, signMessage),
+          },
           timeout: 10000,
         }
       );
@@ -382,7 +438,10 @@ describe('E2E: agent-rotate-key', () => {
         REGISTER_URL,
         { did: existingDid, signature: existingSignature, metadata },
         {
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: generateAuthToken(oldDid, signMessage),
+          },
           timeout: 10000,
         }
       );
@@ -404,7 +463,10 @@ describe('E2E: agent-rotate-key', () => {
             nonce,
           },
           {
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: generateAuthToken(oldDid, signMessage),
+            },
             timeout: 10000,
           }
         );
@@ -429,7 +491,10 @@ describe('E2E: agent-rotate-key', () => {
         REGISTER_URL,
         { did: oldDid, signature, metadata },
         {
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: generateAuthToken(oldDid, signMessage),
+          },
           timeout: 10000,
         }
       );
@@ -450,7 +515,10 @@ describe('E2E: agent-rotate-key', () => {
             nonce,
           },
           {
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: generateAuthToken(oldDid, signMessage),
+            },
             timeout: 10000,
           }
         );
@@ -472,7 +540,10 @@ describe('E2E: agent-rotate-key', () => {
         REGISTER_URL,
         { did: oldDid, signature, metadata },
         {
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: generateAuthToken(oldDid, signMessage),
+          },
           timeout: 10000,
         }
       );
@@ -494,7 +565,10 @@ describe('E2E: agent-rotate-key', () => {
           extraField: 'x'.repeat(10000),
         },
         {
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: generateAuthToken(oldDid, signMessage),
+          },
           timeout: 10000,
         }
       );

@@ -56,6 +56,14 @@ describe('E2E: agent-registration & agent-rotate-key', () => {
     return { did, signMessage };
   };
 
+  const generateAuthToken = (did: string, signMessage: (msg: string) => string): string => {
+    const timestamp = Math.floor(Date.now() / 1000);
+    const nonce = crypto.randomUUID();
+    const authMessage = `auth:${did}:${timestamp}:${nonce}`;
+    const authSignature = signMessage(authMessage);
+    return `${did}:${authSignature}:${timestamp}:${nonce}`;
+  };
+
   describe('Happy Path', () => {
     it('should successfully register a new agent with valid did:key', async () => {
       const { did, signMessage } = generateValidDid();
@@ -281,8 +289,13 @@ describe('E2E: agent-registration & agent-rotate-key', () => {
         nonce,
       };
 
+      const authToken = generateAuthToken(oldDid, signMessage);
+
       const rotateResponse = await axios.post(ROTATE_KEY_URL, rotateBody, {
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: authToken,
+        },
         timeout: 10000,
       });
 
@@ -320,9 +333,14 @@ describe('E2E: agent-registration & agent-rotate-key', () => {
         nonce,
       };
 
+      const authToken = generateAuthToken(oldDid, signMessage);
+
       try {
         await axios.post(ROTATE_KEY_URL, rotateBody, {
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: authToken,
+          },
           timeout: 10000,
         });
         throw new Error('Expected request to fail');
@@ -365,9 +383,14 @@ describe('E2E: agent-registration & agent-rotate-key', () => {
         nonce,
       };
 
+      const authToken = generateAuthToken(oldDid, signMessage);
+
       try {
         await axios.post(ROTATE_KEY_URL, rotateBody, {
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: authToken,
+          },
           timeout: 10000,
         });
         throw new Error('Expected request to fail');
@@ -410,16 +433,24 @@ describe('E2E: agent-registration & agent-rotate-key', () => {
         nonce,
       };
 
+      const authToken = generateAuthToken(oldDid, signMessage);
+
       // First rotate should succeed
       await axios.post(ROTATE_KEY_URL, rotateBody, {
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: authToken,
+        },
         timeout: 10000,
       });
 
       // Second rotate with same nonce should fail
       try {
         await axios.post(ROTATE_KEY_URL, rotateBody, {
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: authToken,
+          },
           timeout: 10000,
         });
         throw new Error('Expected request to fail');
@@ -465,7 +496,10 @@ describe('E2E: agent-registration & agent-rotate-key', () => {
           nonce: nonce1,
         },
         {
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: generateAuthToken(oldDid, signMessage),
+          },
           timeout: 10000,
         }
       );
@@ -489,7 +523,10 @@ describe('E2E: agent-registration & agent-rotate-key', () => {
             nonce: nonce2,
           },
           {
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: generateAuthToken(oldDid, signMessage),
+            },
             timeout: 10000,
           }
         );
@@ -554,7 +591,10 @@ describe('E2E: agent-registration & agent-rotate-key', () => {
             nonce,
           },
           {
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: generateAuthToken(oldDid, signMessage),
+            },
             timeout: 10000,
           }
         );
@@ -608,7 +648,10 @@ describe('E2E: agent-registration & agent-rotate-key', () => {
             nonce: nonce1,
           },
           {
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: generateAuthToken(oldDid, signMessage),
+            },
             timeout: 10000,
           }
         ),
@@ -622,7 +665,10 @@ describe('E2E: agent-registration & agent-rotate-key', () => {
             nonce: nonce2,
           },
           {
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: generateAuthToken(oldDid, signMessage),
+            },
             timeout: 10000,
           }
         ),
