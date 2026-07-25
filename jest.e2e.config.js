@@ -7,11 +7,12 @@ module.exports = {
   roots: ['<rootDir>'],
   testMatch: ['**/__tests__/e2e.test.ts'],
   transform: {
-    '^.+\\.ts$': 'ts-jest',
+    '^.+\.ts$': 'ts-jest',
   },
   moduleFileExtensions: ['ts', 'js', 'json'],
   verbose: true,
-  testTimeout: 30000, // E2E 测试需要更长超时
+  testTimeout: 30000,
+  maxWorkers: 1,
   moduleNameMapper: {
     '^@ainx/logger$': path.resolve(__dirname, 'packages/logger/index.ts'),
     '^@ainx/shared-utils$': path.resolve(__dirname, 'packages/shared-utils/index.ts'),

@@ -218,7 +218,7 @@ jobs:
         run: |
           API_ID=$(aws apigateway get-rest-apis --query "items[?name=='ainx-api-sit'].id" --output text)
           if [ -n "$API_ID" ]; then
-            API_URL="https://${API_ID}.execute-api.${{ env.AWS_REGION }}.amazonaws.com/sit/agents/register"
+            API_URL="https://${API_ID}.execute-api.${{ env.AWS_REGION }}.amazonaws.com/sit"
             echo "API_URL=$API_URL" >> $GITHUB_ENV
             echo "api_url=$API_URL" >> $GITHUB_OUTPUT
             echo "API Gateway URL: $API_URL"
@@ -244,9 +244,10 @@ jobs:
         run: |
           echo "Running E2E tests against $API_URL"
           npm install
-          npx jest --config jest.e2e.config.js
+          npx jest --config jest.e2e.config.js --runInBand
         env:
           API_GATEWAY_URL: ${{ env.API_URL }}
+          REGISTER_URL: ${{ env.API_URL }}
 
   # Deploy jobs - disabled until SIT is verified
   # deploy-uat:
