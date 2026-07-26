@@ -29,29 +29,19 @@ if ! aws sts get-caller-identity &> /dev/null; then
   exit 1
 fi
 
-echo "Step 1/5: Creating DynamoDB tables..."
+echo "Step 1/4: Creating DynamoDB tables..."
 ./scripts/aws-create-tables.sh "$STAGE"
 
 echo ""
-echo "Step 2/5: Creating Lambda execution role..."
-./scripts/create-execution-role.sh "ainx-lambda-execution-role-${STAGE}"
-
-echo ""
-echo "Step 3/5: Creating Lambda functions..."
+echo "Step 2/4: Creating Lambda functions..."
 ./scripts/aws-create-lambdas.sh "$STAGE"
 
 echo ""
-echo "Step 4/5: Creating API Gateway..."
+echo "Step 3/4: Creating API Gateway..."
 ./scripts/aws-create-api-gateway.sh "$STAGE"
 
 echo ""
-echo "Step 5/5: Creating CloudWatch alarms..."
-./scripts/aws-create-alarms.sh "$STAGE"
-
-echo ""
-echo "=========================================="
-echo "Setup complete!"
-echo "=========================================="
+echo "Step 4/4: Setup complete!"
 echo ""
 echo "Next steps:"
 echo "1. Deploy Lambda code: npm run deploy:$STAGE"

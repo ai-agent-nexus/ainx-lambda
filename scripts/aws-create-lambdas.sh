@@ -7,17 +7,47 @@ set -e
 STAGE="${1:-sit}"
 AWS_REGION="${AWS_REGION:-ap-southeast-1}"
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+ROLE_NAME="ainx-lambda-execution-role-${STAGE}"
+ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/${ROLE_NAME}"
 
 echo "Creating Lambda functions for stage: $STAGE"
 
-# 获取执行角色
-ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/ainx-lambda-execution-role-${STAGE}"
-
-# 检查角色是否存在
-if ! aws iam get-role --role-name "ainx-lambda-execution-role-${STAGE}" &> /dev/null; then
-  echo "ERROR: Execution role not found: $ROLE_ARN"
-  echo "Please run: ./scripts/create-execution-role.sh ainx-lambda-execution-role-${STAGE}"
-  exit 1
+# 检查并创建执行角色（如果不存在）
+if ! aws iam get-role --role-name "$ROLE_NAME" &> /dev/null; then
+  echo "  Creating execution role: $ROLE_NAME"
+  
+  # 创建信任策略
+  cat > /tmp/trust-policy.json << 'EOF'
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "lambda.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
+EOF
+  
+  # 创建角色
+  aws iam create-role \
+    --role-name "$ROLE_NAME" \
+    --assume-role-policy-document file:///tmp/trust-policy.json \
+    --description "AINX Lambda execution role for ${STAGE}"
+  
+  # 附加基本执行策略（CloudWatch Logs）
+  aws iam attach-role-policy \
+    --role-name "$ROLE_NAME" \
+    --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+  
+  echo "  Waiting for IAM role propagation (10 seconds)..."
+  sleep 10
+  echo "  Role $ROLE_NAME created"
+else
+  echo "  Using existing role: $ROLE_NAME"
 fi
 
 # 通用 Lambda 创建函数
