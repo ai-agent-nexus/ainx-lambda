@@ -152,32 +152,27 @@ async function authenticate(
     return { valid: false, error: 'Invalid signature' };
   }
 
-  // Check if DID exists and is active
-  const didQuery = await dynamodb
-    .query({
+  const didResult = await dynamodb
+    .get({
       TableName: TABLE_NAME,
-      IndexName: 'DidIndex',
-      KeyConditionExpression: 'did = :did',
-      FilterExpression: '#status = :status',
-      ExpressionAttributeNames: {
-        '#status': 'status',
-      },
-      ExpressionAttributeValues: {
-        ':did': did,
-        ':status': 'active',
-      },
+      Key: { did },
     })
     .promise();
 
-  if (!didQuery.Items || didQuery.Items.length === 0) {
-    return { valid: false, error: 'DID not found or not active' };
+  if (!didResult.Item) {
+    return { valid: false, error: 'DID not found' };
+  }
+
+  const status = didResult.Item.status;
+  if (status !== 'active') {
+    return { valid: false, error: 'DID not active' };
   }
 
   return {
     valid: true,
     context: {
       did,
-      userId: didQuery.Items[0].userId as string,
+      userId: didResult.Item.userId as string,
     },
   };
 }

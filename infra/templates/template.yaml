@@ -65,11 +65,18 @@ Resources:
         DefaultAuthorizer: DIDAuthorizer
         Authorizers:
           DIDAuthorizer:
-            FunctionArn: !GetAtt AuthFunction.Arn
+            FunctionArn: !GetAtt JwtAuthorizerFunction.Arn
             FunctionPayloadType: TOKEN
             Identity:
               Header: Authorization
-              ValidationExpression: ^did:key:[a-zA-Z0-9]+:[A-Za-z0-9+/=]+:\d+:[a-f0-9-]+$
+              ValidationExpression: ^Bearer [A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]*$
+              ReauthorizeEvery: 300
+          None:
+            FunctionArn: !GetAtt JwtAuthorizerFunction.Arn
+            FunctionPayloadType: TOKEN
+            Identity:
+              Header: Authorization
+              ValidationExpression: ^Bearer [A-Za-z0-9-_]+\.[A-Za-z0-9-_]+\.[A-Za-z0-9-_]*$
               ReauthorizeEvery: 300
 
   AgentRegistrationFunction:
@@ -131,6 +138,252 @@ Resources:
       Action: lambda:InvokeFunction
       Principal: apigateway.amazonaws.com
       SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*/*'
+
+  AuthChallengeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'ainx-auth-challenge-${Stage}'
+      Handler: index.handler
+      CodeUri: ./functions/auth-challenge/dist/
+      Description: Auth challenge generation Lambda function
+      Environment:
+        Variables:
+          CHALLENGE_TABLE_NAME: !Ref ChallengeTable
+      Events:
+        AuthChallengeApi:
+          Type: Api
+          Properties:
+            Path: /auth/challenge
+            Method: POST
+            RestApiId: !Ref ApiGateway
+            Auth:
+              Authorizer: None
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+              Resource: 
+                - !GetAtt ChallengeTable.Arn
+
+  AuthTokenFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'ainx-auth-token-${Stage}'
+      Handler: index.handler
+      CodeUri: ./functions/auth-token/dist/
+      Description: Auth token issuance Lambda function
+      Environment:
+        Variables:
+          AGENT_REGISTRATION_TABLE_NAME: !Ref AgentRegistrationTable
+          CHALLENGE_TABLE_NAME: !Ref ChallengeTable
+          REFRESH_TOKEN_TABLE_NAME: !Ref RefreshTokenTable
+          JWT_PRIVATE_KEY: '{{resolve:secretsmanager:ainx-jwt-private-key-${Stage}:SecretString:privateKey}}'
+          JWT_ISSUER: 'ainx-api'
+          JWT_EXPIRES_IN_SECONDS: '3600'
+          REFRESH_TOKEN_TTL_DAYS: '7'
+      Events:
+        AuthTokenApi:
+          Type: Api
+          Properties:
+            Path: /auth/token
+            Method: POST
+            RestApiId: !Ref ApiGateway
+            Auth:
+              Authorizer: None
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:DeleteItem
+                - dynamodb:PutItem
+              Resource: 
+                - !GetAtt AgentRegistrationTable.Arn
+                - !GetAtt ChallengeTable.Arn
+                - !GetAtt RefreshTokenTable.Arn
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: 
+                - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ainx-jwt-private-key-${Stage}-*'
+
+  AuthRefreshFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'ainx-auth-refresh-${Stage}'
+      Handler: index.handler
+      CodeUri: ./functions/auth-refresh/dist/
+      Description: Auth token refresh Lambda function
+      Environment:
+        Variables:
+          REFRESH_TOKEN_TABLE_NAME: !Ref RefreshTokenTable
+          AGENT_REGISTRATION_TABLE_NAME: !Ref AgentRegistrationTable
+          JWT_PRIVATE_KEY: '{{resolve:secretsmanager:ainx-jwt-private-key-${Stage}:SecretString:privateKey}}'
+          JWT_ISSUER: 'ainx-api'
+          JWT_EXPIRES_IN_SECONDS: '3600'
+          REFRESH_TOKEN_TTL_DAYS: '7'
+      Events:
+        AuthRefreshApi:
+          Type: Api
+          Properties:
+            Path: /auth/refresh
+            Method: POST
+            RestApiId: !Ref ApiGateway
+            Auth:
+              Authorizer: None
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:DeleteItem
+                - dynamodb:TransactWriteItems
+              Resource: 
+                - !GetAtt RefreshTokenTable.Arn
+                - !GetAtt AgentRegistrationTable.Arn
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: 
+                - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ainx-jwt-private-key-${Stage}-*'
+
+  AuthRevokeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'ainx-auth-revoke-${Stage}'
+      Handler: index.handler
+      CodeUri: ./functions/auth-revoke/dist/
+      Description: Auth token revocation Lambda function
+      Environment:
+        Variables:
+          REFRESH_TOKEN_TABLE_NAME: !Ref RefreshTokenTable
+          TOKEN_BLACKLIST_TABLE_NAME: !Ref TokenBlacklistTable
+          JWT_PUBLIC_KEY: '{{resolve:secretsmanager:ainx-jwt-public-key-${Stage}:SecretString:publicKey}}'
+          JWT_ISSUER: 'ainx-api'
+          BLACKLIST_TTL_SECONDS: '3600'
+      Events:
+        AuthRevokeApi:
+          Type: Api
+          Properties:
+            Path: /auth/revoke
+            Method: POST
+            RestApiId: !Ref ApiGateway
+            Auth:
+              Authorizer: DIDAuthorizer
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:PutItem
+                - dynamodb:DeleteItem
+                - dynamodb:GetItem
+              Resource: 
+                - !GetAtt RefreshTokenTable.Arn
+                - !GetAtt TokenBlacklistTable.Arn
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: 
+                - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ainx-jwt-public-key-${Stage}-*'
+
+  JwtAuthorizerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'ainx-jwt-authorizer-${Stage}'
+      Handler: index.handler
+      CodeUri: ./functions/jwt-authorizer/dist/
+      Description: JWT authorizer Lambda function for API Gateway
+      Environment:
+        Variables:
+          TOKEN_BLACKLIST_TABLE_NAME: !Ref TokenBlacklistTable
+          JWT_PUBLIC_KEY: '{{resolve:secretsmanager:ainx-jwt-public-key-${Stage}:SecretString:publicKey}}'
+          JWT_ISSUER: 'ainx-api'
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+              Resource: 
+                - !GetAtt TokenBlacklistTable.Arn
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: 
+                - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ainx-jwt-public-key-${Stage}-*'
+
+  JwtAuthorizerFunctionPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref JwtAuthorizerFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*/*'
+
+  AgentRevokeFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'ainx-agent-revoke-${Stage}'
+      Handler: index.handler
+      CodeUri: ./functions/agent-revoke/dist/
+      Description: Agent revocation Lambda function
+      Environment:
+        Variables:
+          AGENT_REGISTRATION_TABLE_NAME: !Ref AgentRegistrationTable
+          DID_UNIQUENESS_TABLE_NAME: !Ref DidUniquenessTable
+          REFRESH_TOKEN_TABLE_NAME: !Ref RefreshTokenTable
+          JWT_PUBLIC_KEY: '{{resolve:secretsmanager:ainx-jwt-public-key-${Stage}:SecretString:publicKey}}'
+          JWT_ISSUER: 'ainx-api'
+      Events:
+        AgentRevokeApi:
+          Type: Api
+          Properties:
+            Path: /agents/{did}
+            Method: DELETE
+            RestApiId: !Ref ApiGateway
+            Auth:
+              Authorizer: DIDAuthorizer
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+                - dynamodb:Query
+                - dynamodb:DeleteItem
+              Resource: 
+                - !GetAtt AgentRegistrationTable.Arn
+                - !GetAtt DidUniquenessTable.Arn
+                - !GetAtt RefreshTokenTable.Arn
+                - !Sub "${RefreshTokenTable.Arn}/index/*"
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - secretsmanager:GetSecretValue
+              Resource: 
+                - !Sub 'arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:ainx-jwt-public-key-${Stage}-*'
 
   AgentRotateKeyFunction:
     Type: AWS::Serverless::Function
@@ -265,6 +518,198 @@ Resources:
       Dimensions:
         - Name: FunctionName
           Value: !Ref AgentRotateKeyFunction
+
+  AuthChallengeErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'ainx-auth-challenge-errors-${Stage}'
+      AlarmDescription: Alarm when auth-challenge function error rate exceeds 1%
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AuthChallengeFunction
+
+  AuthChallengeThrottlingAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'ainx-auth-challenge-throttling-${Stage}'
+      AlarmDescription: Alarm when auth-challenge function is throttled
+      MetricName: Throttles
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AuthChallengeFunction
+
+  AuthTokenErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'ainx-auth-token-errors-${Stage}'
+      AlarmDescription: Alarm when auth-token function error rate exceeds 1%
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AuthTokenFunction
+
+  AuthTokenThrottlingAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'ainx-auth-token-throttling-${Stage}'
+      AlarmDescription: Alarm when auth-token function is throttled
+      MetricName: Throttles
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AuthTokenFunction
+
+  AuthRefreshErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'ainx-auth-refresh-errors-${Stage}'
+      AlarmDescription: Alarm when auth-refresh function error rate exceeds 1%
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AuthRefreshFunction
+
+  AuthRefreshThrottlingAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'ainx-auth-refresh-throttling-${Stage}'
+      AlarmDescription: Alarm when auth-refresh function is throttled
+      MetricName: Throttles
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AuthRefreshFunction
+
+  AuthRevokeErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'ainx-auth-revoke-errors-${Stage}'
+      AlarmDescription: Alarm when auth-revoke function error rate exceeds 1%
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AuthRevokeFunction
+
+  AuthRevokeThrottlingAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'ainx-auth-revoke-throttling-${Stage}'
+      AlarmDescription: Alarm when auth-revoke function is throttled
+      MetricName: Throttles
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AuthRevokeFunction
+
+  JwtAuthorizerErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'ainx-jwt-authorizer-errors-${Stage}'
+      AlarmDescription: Alarm when jwt-authorizer function error rate exceeds 1%
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref JwtAuthorizerFunction
+
+  JwtAuthorizerThrottlingAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'ainx-jwt-authorizer-throttling-${Stage}'
+      AlarmDescription: Alarm when jwt-authorizer function is throttled
+      MetricName: Throttles
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref JwtAuthorizerFunction
+
+  AgentRevokeErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'ainx-agent-revoke-errors-${Stage}'
+      AlarmDescription: Alarm when agent-revoke function error rate exceeds 1%
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AgentRevokeFunction
+
+  AgentRevokeThrottlingAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'ainx-agent-revoke-throttling-${Stage}'
+      AlarmDescription: Alarm when agent-revoke function is throttled
+      MetricName: Throttles
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref AgentRevokeFunction
 
   AgentRegistrationTable:
     Type: AWS::DynamoDB::Table
@@ -460,6 +905,93 @@ Resources:
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AmazonDynamoDBFullAccess
 
+  ChallengeTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'ainx-challenge-${Stage}'
+      BillingMode: PROVISIONED
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      AttributeDefinitions:
+        - AttributeName: did
+          AttributeType: S
+      KeySchema:
+        - AttributeName: did
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      Tags:
+        - Key: Project
+          Value: AINX
+        - Key: Environment
+          Value: !Ref Stage
+        - Key: Service
+          Value: auth
+
+  RefreshTokenTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'ainx-refresh-token-${Stage}'
+      BillingMode: PROVISIONED
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      AttributeDefinitions:
+        - AttributeName: token
+          AttributeType: S
+        - AttributeName: userId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: token
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: UserIdIndex
+          KeySchema:
+            - AttributeName: userId
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+          ProvisionedThroughput:
+            ReadCapacityUnits: 1
+            WriteCapacityUnits: 1
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      Tags:
+        - Key: Project
+          Value: AINX
+        - Key: Environment
+          Value: !Ref Stage
+        - Key: Service
+          Value: auth
+
+  TokenBlacklistTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'ainx-token-blacklist-${Stage}'
+      BillingMode: PROVISIONED
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      AttributeDefinitions:
+        - AttributeName: jti
+          AttributeType: S
+      KeySchema:
+        - AttributeName: jti
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      Tags:
+        - Key: Project
+          Value: AINX
+        - Key: Environment
+          Value: !Ref Stage
+        - Key: Service
+          Value: auth
+
 Outputs:
   ApiUrl:
     Description: API Gateway endpoint URL
@@ -476,3 +1008,27 @@ Outputs:
   AgentRotateKeyFunctionArn:
     Description: Agent Rotate Key Lambda function ARN
     Value: !GetAtt AgentRotateKeyFunction.Arn
+
+  AuthChallengeFunctionArn:
+    Description: Auth Challenge Lambda function ARN
+    Value: !GetAtt AuthChallengeFunction.Arn
+
+  AuthTokenFunctionArn:
+    Description: Auth Token Lambda function ARN
+    Value: !GetAtt AuthTokenFunction.Arn
+
+  AuthRefreshFunctionArn:
+    Description: Auth Refresh Lambda function ARN
+    Value: !GetAtt AuthRefreshFunction.Arn
+
+  AuthRevokeFunctionArn:
+    Description: Auth Revoke Lambda function ARN
+    Value: !GetAtt AuthRevokeFunction.Arn
+
+  JwtAuthorizerFunctionArn:
+    Description: JWT Authorizer Lambda function ARN
+    Value: !GetAtt JwtAuthorizerFunction.Arn
+
+  AgentRevokeFunctionArn:
+    Description: Agent Revoke Lambda function ARN
+    Value: !GetAtt AgentRevokeFunction.Arn

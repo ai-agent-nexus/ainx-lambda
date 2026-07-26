@@ -131,7 +131,7 @@ jobs:
     if: ${{ needs.detect-changes.outputs.functions == 'true' }}
     strategy:
       matrix:
-        function: [agent-registration, auth, agent-rotate-key]
+        function: [agent-registration, auth, agent-rotate-key, auth-challenge, auth-token, auth-refresh, auth-revoke, jwt-authorizer, agent-revoke]
     steps:
       - uses: actions/checkout@v4
 
@@ -189,6 +189,42 @@ jobs:
           name: agent-rotate-key-build
           path: functions/agent-rotate-key/dist/
 
+      - name: Download auth-challenge build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: auth-challenge-build
+          path: functions/auth-challenge/dist/
+
+      - name: Download auth-token build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: auth-token-build
+          path: functions/auth-token/dist/
+
+      - name: Download auth-refresh build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: auth-refresh-build
+          path: functions/auth-refresh/dist/
+
+      - name: Download auth-revoke build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: auth-revoke-build
+          path: functions/auth-revoke/dist/
+
+      - name: Download jwt-authorizer build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: jwt-authorizer-build
+          path: functions/jwt-authorizer/dist/
+
+      - name: Download agent-revoke build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: agent-revoke-build
+          path: functions/agent-revoke/dist/
+
       - name: Update agent-registration Lambda function code
         run: |
           ./scripts/update-lambda.sh \
@@ -212,6 +248,54 @@ jobs:
             ${{ vars.AGENT_REGISTRATION_TABLE_NAME }} \
             ${{ vars.DID_UNIQUENESS_TABLE_NAME }} \
             ${{ vars.NONCE_TABLE_NAME }}
+
+      - name: Update auth-challenge Lambda function code
+        run: |
+          ./scripts/update-lambda.sh \
+            ainx-auth-challenge-sit \
+            functions/auth-challenge/dist/index.zip \
+            ${{ vars.CHALLENGE_TABLE_NAME }}
+
+      - name: Update auth-token Lambda function code
+        run: |
+          ./scripts/update-lambda.sh \
+            ainx-auth-token-sit \
+            functions/auth-token/dist/index.zip \
+            ${{ vars.AGENT_REGISTRATION_TABLE_NAME }} \
+            ${{ vars.CHALLENGE_TABLE_NAME }} \
+            ${{ vars.REFRESH_TOKEN_TABLE_NAME }}
+
+      - name: Update auth-refresh Lambda function code
+        run: |
+          ./scripts/update-lambda.sh \
+            ainx-auth-refresh-sit \
+            functions/auth-refresh/dist/index.zip \
+            ${{ vars.REFRESH_TOKEN_TABLE_NAME }} \
+            ${{ vars.AGENT_REGISTRATION_TABLE_NAME }}
+
+      - name: Update auth-revoke Lambda function code
+        run: |
+          ./scripts/update-lambda.sh \
+            ainx-auth-revoke-sit \
+            functions/auth-revoke/dist/index.zip \
+            ${{ vars.REFRESH_TOKEN_TABLE_NAME }} \
+            ${{ vars.TOKEN_BLACKLIST_TABLE_NAME }}
+
+      - name: Update jwt-authorizer Lambda function code
+        run: |
+          ./scripts/update-lambda.sh \
+            ainx-jwt-authorizer-sit \
+            functions/jwt-authorizer/dist/index.zip \
+            ${{ vars.TOKEN_BLACKLIST_TABLE_NAME }}
+
+      - name: Update agent-revoke Lambda function code
+        run: |
+          ./scripts/update-lambda.sh \
+            ainx-agent-revoke-sit \
+            functions/agent-revoke/dist/index.zip \
+            ${{ vars.AGENT_REGISTRATION_TABLE_NAME }} \
+            ${{ vars.DID_UNIQUENESS_TABLE_NAME }} \
+            ${{ vars.REFRESH_TOKEN_TABLE_NAME }}
 
       - name: Get API Gateway URL
         id: get-api-url
