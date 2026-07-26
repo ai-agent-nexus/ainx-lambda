@@ -4,7 +4,14 @@ process.env.NONCE_TABLE_NAME = 'test-nonce-table';
 import { APIGatewayTokenAuthorizerEvent } from 'aws-lambda';
 import { handler } from '../src/index';
 
-jest.mock('@ainx/logger');
+jest.mock('@ainx/logger', () => ({
+  Logger: jest.fn().mockImplementation(() => ({
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  })),
+}));
 
 jest.mock('@ainx/did-utils', () => ({
   parseDidKey: jest.fn((did: string) => {
@@ -23,21 +30,13 @@ jest.mock('@ainx/crypto-utils', () => ({
   verifySignature: jest.fn(() => true),
 }));
 
-const mockQueryFn = jest.fn((_params: unknown) => ({
-  promise: jest.fn().mockResolvedValue({
-    Items: [
-      {
-        userId: 'test-user-id',
-        did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
-        status: 'active',
-      },
-    ],
-  }),
-})) as jest.Mock;
-
 const mockGetFn = jest.fn((_params: unknown) => ({
   promise: jest.fn().mockResolvedValue({
-    Item: undefined,
+    Item: {
+      userId: 'test-user-id',
+      did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
+      status: 'active',
+    },
   }),
 })) as jest.Mock;
 
@@ -48,7 +47,6 @@ const mockPutFn = jest.fn((_params: unknown) => ({
 jest.mock('aws-sdk', () => ({
   DynamoDB: {
     DocumentClient: jest.fn(() => ({
-      query: (_params: unknown) => (mockQueryFn as jest.Mock)(_params),
       get: (_params: unknown) => (mockGetFn as jest.Mock)(_params),
       put: (_params: unknown) => (mockPutFn as jest.Mock)(_params),
     })),
@@ -61,9 +59,11 @@ describe('auth handler', () => {
   const validSignature = 'dGVzdHNpZ25hdHVyZQ==';
   const validTimestamp = Math.floor(Date.now() / 1000);
   const validNonce = 'test-nonce-123';
-  const validToken = `${validDid}:${validSignature}:${validTimestamp}:${validNonce}`;
+  let validToken: string;
 
   beforeEach(() => {
+    const currentTimestamp = Math.floor(Date.now() / 1000);
+    validToken = `${validDid}:${validSignature}:${currentTimestamp}:${validNonce}`;
     mockEvent = {
       type: 'TOKEN',
       methodArn: 'arn:aws:execute-api:us-east-1:123456789012:abc123/sit/POST/agents/rotate-key',
@@ -71,22 +71,25 @@ describe('auth handler', () => {
     };
     process.env.AGENT_REGISTRATION_TABLE_NAME = 'test-table';
     process.env.NONCE_TABLE_NAME = 'test-nonce-table';
-    mockQueryFn.mockImplementation(() => ({
-      promise: jest.fn().mockResolvedValue({
-        Items: [
-          {
+    mockGetFn.mockImplementation((params: unknown) => {
+      const p = params as { TableName: string };
+      if (p.TableName === 'test-nonce-table') {
+        return {
+          promise: jest.fn().mockResolvedValue({
+            Item: undefined,
+          }),
+        };
+      }
+      return {
+        promise: jest.fn().mockResolvedValue({
+          Item: {
             userId: 'test-user-id',
-            did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
+            did: validDid,
             status: 'active',
           },
-        ],
-      }),
-    }));
-    mockGetFn.mockImplementation(() => ({
-      promise: jest.fn().mockResolvedValue({
-        Item: undefined,
-      }),
-    }));
+        }),
+      };
+    });
     mockPutFn.mockImplementation(() => ({
       promise: jest.fn().mockResolvedValue({}),
     }));
@@ -194,11 +197,21 @@ describe('auth handler', () => {
 
   describe('DID status check', () => {
     it('should return deny policy for revoked DID', async () => {
-      mockQueryFn.mockImplementationOnce(() => ({
-        promise: jest.fn().mockResolvedValue({
-          Items: [],
-        }),
-      }));
+      mockGetFn.mockImplementation((params: unknown) => {
+        const p = params as { TableName: string };
+        if (p.TableName === 'test-table') {
+          return {
+            promise: jest.fn().mockResolvedValue({
+              Item: undefined,
+            }),
+          };
+        }
+        return {
+          promise: jest.fn().mockResolvedValue({
+            Item: undefined,
+          }),
+        };
+      });
 
       const result = await handler(mockEvent as APIGatewayTokenAuthorizerEvent);
 
@@ -229,22 +242,19 @@ describe('auth handler', () => {
       });
     });
 
-    it('should query DynamoDB with correct parameters', async () => {
+    it('should get DynamoDB item with correct parameters', async () => {
       await handler(mockEvent as APIGatewayTokenAuthorizerEvent);
 
-      expect(mockQueryFn).toHaveBeenCalledWith(
+      expect(mockGetFn).toHaveBeenCalledWith(
+        expect.objectContaining({
+          TableName: 'test-nonce-table',
+          Key: { nonce: validNonce },
+        })
+      );
+      expect(mockGetFn).toHaveBeenCalledWith(
         expect.objectContaining({
           TableName: 'test-table',
-          IndexName: 'DidIndex',
-          KeyConditionExpression: 'did = :did',
-          FilterExpression: '#status = :status',
-          ExpressionAttributeNames: {
-            '#status': 'status',
-          },
-          ExpressionAttributeValues: {
-            ':did': validDid,
-            ':status': 'active',
-          },
+          Key: { did: validDid },
         })
       );
     });
@@ -265,10 +275,20 @@ describe('auth handler', () => {
   });
 
   describe('Error handling', () => {
-    it('should return deny policy on DynamoDB query error', async () => {
-      mockQueryFn.mockImplementationOnce(() => ({
-        promise: jest.fn().mockRejectedValue(new Error('DB Error')),
-      }));
+    it('should return deny policy on DynamoDB get error', async () => {
+      mockGetFn.mockImplementation((params: unknown) => {
+        const p = params as { TableName: string };
+        if (p.TableName === 'test-table') {
+          return {
+            promise: jest.fn().mockRejectedValue(new Error('DB Error')),
+          };
+        }
+        return {
+          promise: jest.fn().mockResolvedValue({
+            Item: undefined,
+          }),
+        };
+      });
 
       const result = await handler(mockEvent as APIGatewayTokenAuthorizerEvent);
 
@@ -277,9 +297,23 @@ describe('auth handler', () => {
     });
 
     it('should return deny policy on nonce validation error', async () => {
-      mockGetFn.mockImplementationOnce(() => ({
-        promise: jest.fn().mockRejectedValue(new Error('Nonce DB Error')),
-      }));
+      mockGetFn.mockImplementation((params: unknown) => {
+        const p = params as { TableName: string };
+        if (p.TableName.includes('nonce')) {
+          return {
+            promise: jest.fn().mockRejectedValue(new Error('Nonce DB Error')),
+          };
+        }
+        return {
+          promise: jest.fn().mockResolvedValue({
+            Item: {
+              userId: 'test-user-id',
+              did: validDid,
+              status: 'active',
+            },
+          }),
+        };
+      });
 
       const result = await handler(mockEvent as APIGatewayTokenAuthorizerEvent);
 
