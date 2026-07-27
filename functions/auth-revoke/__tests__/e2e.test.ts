@@ -201,7 +201,9 @@ describe('E2E: auth-revoke', () => {
       } catch (error: unknown) {
         const axiosError = error as { response?: { status: number; data: { Message: string } } };
         expect(axiosError.response?.status).toBe(403);
-        expect(axiosError.response?.data.Message).toBe('User is not authorized to access this resource with an explicit deny in an identity-based policy');
+        expect(axiosError.response?.data.Message).toBe(
+          'User is not authorized to access this resource with an explicit deny in an identity-based policy'
+        );
       }
     });
   });
