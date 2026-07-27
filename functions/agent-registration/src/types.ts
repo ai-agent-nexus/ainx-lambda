@@ -11,15 +11,37 @@ export interface AgentRegistrationResponse {
   ttl: number;
 }
 
+export interface RotateKeyRequest {
+  oldDid: string;
+  newDid: string;
+  signature: string;
+  timestamp: number;
+  nonce: string;
+}
+
+export interface RotateKeyResponse {
+  message: string;
+  did: string;
+  updatedAt: string;
+}
+
 export interface AgentRegistrationError {
   error: string;
   code: string;
 }
 
 export interface DynamoDBAgentItem {
+  userId: string;
   did: string;
-  signature: string;
+  status: 'active' | 'revoked';
+  publicKey: string;
   metadata: Record<string, unknown>;
+  didHistory: Array<{
+    did: string;
+    revokedAt: string | null;
+    reason: string | null;
+  }>;
   registeredAt: string;
+  updatedAt: string;
   ttl: number;
 }

@@ -5,17 +5,19 @@ import crypto from 'crypto';
  * E2E Tests for agent-registration
  *
  * These tests call the actual API Gateway endpoint to verify end-to-end functionality.
- * Run with: API_GATEWAY_URL=<url> npm run test:e2e
+ * Run with: REGISTER_URL=<url> npm run test:e2e
  *
  * Requirements:
- * - API_GATEWAY_URL environment variable pointing to the deployed API Gateway
+ * - REGISTER_URL environment variable pointing to the deployed API Gateway
  * - AWS credentials for the test environment
  */
 
 // Get API Gateway URL from environment or use default
-const API_GATEWAY_URL = process.env.API_GATEWAY_URL || 'http://localhost:3000/agents/register';
+const API_BASE_URL = process.env.API_GATEWAY_URL || 'http://localhost:3000';
+const REGISTER_URL = `${API_BASE_URL}/agents/register`;
+const ROTATE_KEY_URL = `${API_BASE_URL}/agents/rotate-key`;
 
-describe('E2E: agent-registration', () => {
+describe('E2E: agent-registration & agent-rotate-key', () => {
   // Generate a valid did:key with proper signature
   const generateValidDid = () => {
     // Generate an ed25519 key pair
@@ -54,6 +56,14 @@ describe('E2E: agent-registration', () => {
     return { did, signMessage };
   };
 
+  const generateAuthToken = (did: string, signMessage: (msg: string) => string): string => {
+    const timestamp = Math.floor(Date.now() / 1000);
+    const nonce = crypto.randomUUID();
+    const authMessage = `auth:${did}:${timestamp}:${nonce}`;
+    const authSignature = signMessage(authMessage);
+    return `${did}:${authSignature}:${timestamp}:${nonce}`;
+  };
+
   describe('Happy Path', () => {
     it('should successfully register a new agent with valid did:key', async () => {
       const { did, signMessage } = generateValidDid();
@@ -70,7 +80,7 @@ describe('E2E: agent-registration', () => {
         metadata,
       };
 
-      const response = await axios.post(API_GATEWAY_URL, requestBody, {
+      const response = await axios.post(REGISTER_URL, requestBody, {
         headers: { 'Content-Type': 'application/json' },
         timeout: 10000,
       });
@@ -94,7 +104,7 @@ describe('E2E: agent-registration', () => {
         metadata,
       };
 
-      const response = await axios.post(API_GATEWAY_URL, requestBody, {
+      const response = await axios.post(REGISTER_URL, requestBody, {
         headers: { 'Content-Type': 'application/json' },
         timeout: 10000,
       });
@@ -113,7 +123,7 @@ describe('E2E: agent-registration', () => {
       };
 
       try {
-        await axios.post(API_GATEWAY_URL, requestBody, {
+        await axios.post(REGISTER_URL, requestBody, {
           headers: { 'Content-Type': 'application/json' },
           timeout: 10000,
         });
@@ -132,7 +142,7 @@ describe('E2E: agent-registration', () => {
       };
 
       try {
-        await axios.post(API_GATEWAY_URL, requestBody, {
+        await axios.post(REGISTER_URL, requestBody, {
           headers: { 'Content-Type': 'application/json' },
           timeout: 10000,
         });
@@ -157,7 +167,7 @@ describe('E2E: agent-registration', () => {
       };
 
       // First registration
-      const firstResponse = await axios.post(API_GATEWAY_URL, requestBody, {
+      const firstResponse = await axios.post(REGISTER_URL, requestBody, {
         headers: { 'Content-Type': 'application/json' },
         timeout: 10000,
       });
@@ -165,7 +175,7 @@ describe('E2E: agent-registration', () => {
 
       // Second registration with same DID
       try {
-        await axios.post(API_GATEWAY_URL, requestBody, {
+        await axios.post(REGISTER_URL, requestBody, {
           headers: { 'Content-Type': 'application/json' },
           timeout: 10000,
         });
@@ -186,7 +196,7 @@ describe('E2E: agent-registration', () => {
       };
 
       try {
-        await axios.post(API_GATEWAY_URL, requestBody, {
+        await axios.post(REGISTER_URL, requestBody, {
           headers: { 'Content-Type': 'application/json' },
           timeout: 10000,
         });
@@ -203,7 +213,7 @@ describe('E2E: agent-registration', () => {
     it('should handle empty request body', async () => {
       try {
         await axios.post(
-          API_GATEWAY_URL,
+          REGISTER_URL,
           {},
           {
             headers: { 'Content-Type': 'application/json' },
@@ -233,12 +243,443 @@ describe('E2E: agent-registration', () => {
         metadata: largeMetadata,
       };
 
-      const response = await axios.post(API_GATEWAY_URL, requestBody, {
+      const response = await axios.post(REGISTER_URL, requestBody, {
         headers: { 'Content-Type': 'application/json' },
         timeout: 10000,
       });
 
       expect(response.status).toBe(201);
+    });
+  });
+
+  describe('Rotate Key', () => {
+    it('should successfully rotate key for an active DID', async () => {
+      // First register a DID
+      const { did: oldDid, signMessage } = generateValidDid();
+      const metadata = { name: 'Test Agent' };
+      const message = JSON.stringify({ did: oldDid, metadata });
+      const signature = signMessage(message);
+
+      const registerBody = {
+        did: oldDid,
+        signature,
+        metadata,
+      };
+
+      const registerResponse = await axios.post(REGISTER_URL, registerBody, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+      });
+      expect(registerResponse.status).toBe(201);
+
+      // Generate new DID
+      const { did: newDid } = generateValidDid();
+      const timestamp = Math.floor(Date.now() / 1000);
+      const nonce = crypto.randomUUID();
+
+      // Create rotate key signature
+      const rotateMessage = `POST /agents/rotate-key\nrotate:${oldDid}:${newDid}:${timestamp}:${nonce}`;
+      const rotateSignature = signMessage(rotateMessage);
+
+      const rotateBody = {
+        oldDid,
+        newDid,
+        signature: rotateSignature,
+        timestamp,
+        nonce,
+      };
+
+      const authToken = generateAuthToken(oldDid, signMessage);
+
+      const rotateResponse = await axios.post(ROTATE_KEY_URL, rotateBody, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: authToken,
+        },
+        timeout: 10000,
+      });
+
+      expect(rotateResponse.status).toBe(200);
+      expect(rotateResponse.data.message).toBe('Key rotated successfully');
+      expect(rotateResponse.data.did).toBe(newDid);
+    });
+
+    it('should fail to rotate key with invalid signature', async () => {
+      const { did: oldDid, signMessage } = generateValidDid();
+      const metadata = { name: 'Test Agent' };
+      const message = JSON.stringify({ did: oldDid, metadata });
+      const signature = signMessage(message);
+
+      const registerBody = {
+        did: oldDid,
+        signature,
+        metadata,
+      };
+
+      await axios.post(REGISTER_URL, registerBody, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+      });
+
+      const { did: newDid } = generateValidDid();
+      const timestamp = Math.floor(Date.now() / 1000);
+      const nonce = crypto.randomUUID();
+
+      const rotateBody = {
+        oldDid,
+        newDid,
+        signature: 'invalid-signature',
+        timestamp,
+        nonce,
+      };
+
+      const authToken = generateAuthToken(oldDid, signMessage);
+
+      try {
+        await axios.post(ROTATE_KEY_URL, rotateBody, {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: authToken,
+          },
+          timeout: 10000,
+        });
+        throw new Error('Expected request to fail');
+      } catch (error: unknown) {
+        const axiosError = error as { response?: { status: number; data: { code: string } } };
+        expect(axiosError.response?.status).toBe(400);
+        expect(axiosError.response?.data.code).toBe('INVALID_SIGNATURE');
+      }
+    });
+
+    it('should fail to rotate key with expired timestamp', async () => {
+      const { did: oldDid, signMessage } = generateValidDid();
+      const metadata = { name: 'Test Agent' };
+      const message = JSON.stringify({ did: oldDid, metadata });
+      const signature = signMessage(message);
+
+      const registerBody = {
+        did: oldDid,
+        signature,
+        metadata,
+      };
+
+      await axios.post(REGISTER_URL, registerBody, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+      });
+
+      const { did: newDid } = generateValidDid();
+      const timestamp = Math.floor(Date.now() / 1000) - 400; // Expired
+      const nonce = crypto.randomUUID();
+
+      const rotateMessage = `POST /agents/rotate-key\nrotate:${oldDid}:${newDid}:${timestamp}:${nonce}`;
+      const rotateSignature = signMessage(rotateMessage);
+
+      const rotateBody = {
+        oldDid,
+        newDid,
+        signature: rotateSignature,
+        timestamp,
+        nonce,
+      };
+
+      const authToken = generateAuthToken(oldDid, signMessage);
+
+      try {
+        await axios.post(ROTATE_KEY_URL, rotateBody, {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: authToken,
+          },
+          timeout: 10000,
+        });
+        throw new Error('Expected request to fail');
+      } catch (error: unknown) {
+        const axiosError = error as { response?: { status: number; data: { code: string } } };
+        expect(axiosError.response?.status).toBe(400);
+        expect(axiosError.response?.data.code).toBe('TIMESTAMP_EXPIRED');
+      }
+    });
+
+    it('should fail to rotate key with reused nonce', async () => {
+      const { did: oldDid, signMessage } = generateValidDid();
+      const metadata = { name: 'Test Agent' };
+      const message = JSON.stringify({ did: oldDid, metadata });
+      const signature = signMessage(message);
+
+      const registerBody = {
+        did: oldDid,
+        signature,
+        metadata,
+      };
+
+      await axios.post(REGISTER_URL, registerBody, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+      });
+
+      const { did: newDid } = generateValidDid();
+      const timestamp = Math.floor(Date.now() / 1000);
+      const nonce = crypto.randomUUID();
+
+      const rotateMessage = `POST /agents/rotate-key\nrotate:${oldDid}:${newDid}:${timestamp}:${nonce}`;
+      const rotateSignature = signMessage(rotateMessage);
+
+      const rotateBody = {
+        oldDid,
+        newDid,
+        signature: rotateSignature,
+        timestamp,
+        nonce,
+      };
+
+      const authToken = generateAuthToken(oldDid, signMessage);
+
+      // First rotate should succeed
+      await axios.post(ROTATE_KEY_URL, rotateBody, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: authToken,
+        },
+        timeout: 10000,
+      });
+
+      // Second rotate with same nonce should fail
+      try {
+        await axios.post(ROTATE_KEY_URL, rotateBody, {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: authToken,
+          },
+          timeout: 10000,
+        });
+        throw new Error('Expected request to fail');
+      } catch (error: unknown) {
+        const axiosError = error as { response?: { status: number; data: { code: string } } };
+        expect(axiosError.response?.status).toBe(400);
+        expect(axiosError.response?.data.code).toBe('REUSED_NONCE');
+      }
+    });
+
+    it('should fail to rotate key for already revoked DID', async () => {
+      const { did: oldDid, signMessage } = generateValidDid();
+      const metadata = { name: 'Test Agent' };
+      const message = JSON.stringify({ did: oldDid, metadata });
+      const signature = signMessage(message);
+
+      const registerBody = {
+        did: oldDid,
+        signature,
+        metadata,
+      };
+
+      await axios.post(REGISTER_URL, registerBody, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+      });
+
+      // First rotate
+      const { did: intermediateDid } = generateValidDid();
+      const timestamp1 = Math.floor(Date.now() / 1000);
+      const nonce1 = crypto.randomUUID();
+
+      const rotateMessage1 = `POST /agents/rotate-key\nrotate:${oldDid}:${intermediateDid}:${timestamp1}:${nonce1}`;
+      const rotateSignature1 = signMessage(rotateMessage1);
+
+      await axios.post(
+        ROTATE_KEY_URL,
+        {
+          oldDid,
+          newDid: intermediateDid,
+          signature: rotateSignature1,
+          timestamp: timestamp1,
+          nonce: nonce1,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: generateAuthToken(oldDid, signMessage),
+          },
+          timeout: 10000,
+        }
+      );
+
+      // Second rotate with old DID should fail
+      const { did: newDid } = generateValidDid();
+      const timestamp2 = Math.floor(Date.now() / 1000);
+      const nonce2 = crypto.randomUUID();
+
+      const rotateMessage2 = `POST /agents/rotate-key\nrotate:${oldDid}:${newDid}:${timestamp2}:${nonce2}`;
+      const rotateSignature2 = signMessage(rotateMessage2);
+
+      try {
+        await axios.post(
+          ROTATE_KEY_URL,
+          {
+            oldDid,
+            newDid,
+            signature: rotateSignature2,
+            timestamp: timestamp2,
+            nonce: nonce2,
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: generateAuthToken(oldDid, signMessage),
+            },
+            timeout: 10000,
+          }
+        );
+        throw new Error('Expected request to fail');
+      } catch (error: unknown) {
+        const axiosError = error as { response?: { status: number; data: { code: string } } };
+        expect(axiosError.response?.status).toBe(400);
+        expect(axiosError.response?.data.code).toBe('DID_REVOKED');
+      }
+    });
+
+    it('should fail to rotate key with duplicate new DID', async () => {
+      const { did: oldDid, signMessage } = generateValidDid();
+      const metadata = { name: 'Test Agent' };
+      const message = JSON.stringify({ did: oldDid, metadata });
+      const signature = signMessage(message);
+
+      const registerBody = {
+        did: oldDid,
+        signature,
+        metadata,
+      };
+
+      await axios.post(REGISTER_URL, registerBody, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+      });
+
+      // Register another DID
+      const { did: existingDid, signMessage: existingSignMessage } = generateValidDid();
+      const existingMessage = JSON.stringify({ did: existingDid, metadata });
+      const existingSignature = existingSignMessage(existingMessage);
+
+      await axios.post(
+        REGISTER_URL,
+        {
+          did: existingDid,
+          signature: existingSignature,
+          metadata,
+        },
+        {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 10000,
+        }
+      );
+
+      // Try to rotate to existing DID
+      const timestamp = Math.floor(Date.now() / 1000);
+      const nonce = crypto.randomUUID();
+
+      const rotateMessage = `POST /agents/rotate-key\nrotate:${oldDid}:${existingDid}:${timestamp}:${nonce}`;
+      const rotateSignature = signMessage(rotateMessage);
+
+      try {
+        await axios.post(
+          ROTATE_KEY_URL,
+          {
+            oldDid,
+            newDid: existingDid,
+            signature: rotateSignature,
+            timestamp,
+            nonce,
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: generateAuthToken(oldDid, signMessage),
+            },
+            timeout: 10000,
+          }
+        );
+        throw new Error('Expected request to fail');
+      } catch (error: unknown) {
+        const axiosError = error as { response?: { status: number; data: { code: string } } };
+        expect(axiosError.response?.status).toBe(409);
+        expect(axiosError.response?.data.code).toBe('DUPLICATE_DID');
+      }
+    });
+
+    it('should handle concurrent rotate-key requests', async () => {
+      const { did: oldDid, signMessage } = generateValidDid();
+      const metadata = { name: 'Test Agent' };
+      const message = JSON.stringify({ did: oldDid, metadata });
+      const signature = signMessage(message);
+
+      const registerBody = {
+        did: oldDid,
+        signature,
+        metadata,
+      };
+
+      await axios.post(REGISTER_URL, registerBody, {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+      });
+
+      // Try concurrent rotations
+      const { did: newDid1 } = generateValidDid();
+      const { did: newDid2 } = generateValidDid();
+
+      const timestamp = Math.floor(Date.now() / 1000);
+      const nonce1 = crypto.randomUUID();
+      const nonce2 = crypto.randomUUID();
+
+      const rotateMessage1 = `POST /agents/rotate-key\nrotate:${oldDid}:${newDid1}:${timestamp}:${nonce1}`;
+      const rotateSignature1 = signMessage(rotateMessage1);
+
+      const rotateMessage2 = `POST /agents/rotate-key\nrotate:${oldDid}:${newDid2}:${timestamp}:${nonce2}`;
+      const rotateSignature2 = signMessage(rotateMessage2);
+
+      const [result1, result2] = await Promise.allSettled([
+        axios.post(
+          ROTATE_KEY_URL,
+          {
+            oldDid,
+            newDid: newDid1,
+            signature: rotateSignature1,
+            timestamp,
+            nonce: nonce1,
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: generateAuthToken(oldDid, signMessage),
+            },
+            timeout: 10000,
+          }
+        ),
+        axios.post(
+          ROTATE_KEY_URL,
+          {
+            oldDid,
+            newDid: newDid2,
+            signature: rotateSignature2,
+            timestamp,
+            nonce: nonce2,
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: generateAuthToken(oldDid, signMessage),
+            },
+            timeout: 10000,
+          }
+        ),
+      ]);
+
+      // One should succeed, one should fail
+      const successCount = [result1, result2].filter((r) => r.status === 'fulfilled').length;
+      const failureCount = [result1, result2].filter((r) => r.status === 'rejected').length;
+
+      expect(successCount).toBe(1);
+      expect(failureCount).toBe(1);
     });
   });
 
@@ -257,7 +698,7 @@ describe('E2E: agent-registration', () => {
         metadata,
       };
 
-      const response = await axios.post(API_GATEWAY_URL, requestBody, {
+      const response = await axios.post(REGISTER_URL, requestBody, {
         headers: { 'Content-Type': 'application/json' },
         timeout: 10000,
       });
@@ -280,7 +721,7 @@ describe('E2E: agent-registration', () => {
         metadata,
       };
 
-      const response = await axios.post(API_GATEWAY_URL, requestBody, {
+      const response = await axios.post(REGISTER_URL, requestBody, {
         headers: { 'Content-Type': 'application/json' },
         timeout: 10000,
       });

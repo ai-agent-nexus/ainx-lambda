@@ -1,5 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { DynamoDB } from 'aws-sdk';
+import crypto from 'crypto';
 import { Logger } from '@ainx/logger';
 import { formatResponse, parseBody, validateInput } from '@ainx/shared-utils';
 import { parseDidKey } from '@ainx/did-utils';
@@ -7,10 +8,13 @@ import { verifySignature } from '@ainx/crypto-utils';
 
 const logger = new Logger('agent-registration');
 const dynamodb = new DynamoDB.DocumentClient();
-const TABLE_NAME = process.env.AGENT_REGISTRATION_TABLE_NAME;
-if (!TABLE_NAME) {
-  throw new Error('AGENT_REGISTRATION_TABLE_NAME environment variable is required');
+const TABLE_NAME = process.env.AGENT_REGISTRATION_TABLE_NAME!;
+const DID_UNIQUENESS_TABLE_NAME = process.env.DID_UNIQUENESS_TABLE_NAME!;
+
+if (!TABLE_NAME || !DID_UNIQUENESS_TABLE_NAME) {
+  throw new Error('Required environment variables are missing');
 }
+
 const TTL_DAYS = 90;
 
 interface AgentRegistrationRequest {
@@ -25,6 +29,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       path: event.path,
       method: event.httpMethod,
     });
+
+    if (event.path !== '/agents/register' || event.httpMethod !== 'POST') {
+      return formatResponse(404, {
+        error: 'Not found',
+        code: 'NOT_FOUND',
+      });
+    }
 
     const body = parseBody<AgentRegistrationRequest>(event.body);
     if (!body) {
@@ -86,25 +97,48 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     const now = new Date();
     const ttl = Math.floor(now.getTime() / 1000) + TTL_DAYS * 24 * 60 * 60;
+    const userId = crypto.randomUUID();
 
     const item = {
+      userId,
       did,
-      signature,
+      status: 'active',
+      publicKey: publicKey.toString('base64'),
       metadata,
+      didHistory: [{ did, revokedAt: null, reason: null }],
       registeredAt: now.toISOString(),
+      updatedAt: now.toISOString(),
       ttl,
     };
 
     try {
       await dynamodb
-        .put({
-          TableName: TABLE_NAME,
-          Item: item,
-          ConditionExpression: 'attribute_not_exists(did)',
+        .transactWrite({
+          TransactItems: [
+            {
+              Put: {
+                TableName: DID_UNIQUENESS_TABLE_NAME,
+                Item: {
+                  did,
+                  userId,
+                  createdAt: now.toISOString(),
+                  ttl,
+                },
+                ConditionExpression: 'attribute_not_exists(did)',
+              },
+            },
+            {
+              Put: {
+                TableName: TABLE_NAME,
+                Item: item,
+                ConditionExpression: 'attribute_not_exists(userId) AND attribute_not_exists(did)',
+              },
+            },
+          ],
         })
         .promise();
     } catch (err) {
-      if ((err as Error).name === 'ConditionalCheckFailedException') {
+      if ((err as Error).name === 'TransactionCanceledException') {
         logger.warn('Duplicate DID registration attempt', { did });
         return formatResponse(409, {
           error: 'DID already registered',
@@ -114,7 +148,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       throw err;
     }
 
-    logger.info('Agent registered successfully', { did, ttl });
+    logger.info('Agent registered successfully', { did, userId, ttl });
 
     return formatResponse(201, {
       message: 'Agent registered successfully',
