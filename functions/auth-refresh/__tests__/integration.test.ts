@@ -45,6 +45,34 @@ const dynamoDBState = {
   agents: new Map<string, unknown>(),
 };
 
+const mockQueryFn = jest.fn((_params: unknown) => {
+  const params = _params as {
+    TableName: string;
+    KeyConditionExpression: string;
+    ExpressionAttributeValues: Record<string, unknown>;
+  };
+  const tableName = params.TableName;
+  const expressionValues = params.ExpressionAttributeValues;
+
+  if (tableName.includes('agent-registration')) {
+    const did = expressionValues[':did'] as string;
+    const items: unknown[] = [];
+    dynamoDBState.agents.forEach((agent) => {
+      const agentRecord = agent as Record<string, unknown>;
+      if (agentRecord.did === did && agentRecord.status === 'active') {
+        items.push(agentRecord);
+      }
+    });
+    return {
+      promise: jest.fn().mockResolvedValue({ Items: items }),
+    };
+  }
+
+  return {
+    promise: jest.fn().mockResolvedValue({ Items: [] }),
+  };
+});
+
 const mockGetFn = jest.fn((_params: unknown) => {
   const params = _params as { TableName: string; Key: Record<string, unknown> };
   const tableName = params.TableName;
@@ -109,6 +137,7 @@ jest.mock('aws-sdk', () => ({
     DocumentClient: jest.fn(() => ({
       get: (_params: unknown) => mockGetFn(_params),
       transactWrite: (_params: unknown) => mockTransactWriteFn(_params),
+      query: (_params: unknown) => mockQueryFn(_params),
     })),
   },
 }));

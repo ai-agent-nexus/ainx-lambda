@@ -39,6 +39,10 @@ jest.mock('jsonwebtoken', () => ({
   sign: jest.fn(() => 'mock-jwt-token'),
 }));
 
+const mockQueryFn = jest.fn((_params: unknown) => ({
+  promise: jest.fn().mockResolvedValue({ Items: [] }),
+}));
+
 const mockGetFn = jest.fn((_params: unknown) => ({
   promise: jest.fn().mockResolvedValue({ Item: undefined }),
 }));
@@ -52,6 +56,7 @@ jest.mock('aws-sdk', () => ({
     DocumentClient: jest.fn(() => ({
       get: (...args: unknown[]) => (mockGetFn as jest.Mock)(...args),
       transactWrite: (...args: unknown[]) => (mockTransactWriteFn as jest.Mock)(...args),
+      query: (...args: unknown[]) => (mockQueryFn as jest.Mock)(...args),
     })),
   },
 }));
@@ -74,6 +79,9 @@ describe('auth-refresh handler', () => {
 
     mockGetFn.mockImplementation(() => ({
       promise: jest.fn().mockResolvedValue({ Item: undefined }),
+    }));
+    mockQueryFn.mockImplementation(() => ({
+      promise: jest.fn().mockResolvedValue({ Items: [] }),
     }));
     mockTransactWriteFn.mockImplementation(() => ({
       promise: jest.fn().mockResolvedValue({}),
@@ -102,18 +110,25 @@ describe('auth-refresh handler', () => {
             }),
           };
         }
+        return { promise: jest.fn().mockResolvedValue({ Item: undefined }) };
+      });
+
+      mockQueryFn.mockImplementation((params: unknown) => {
+        const p = params as { TableName: string };
         if (p.TableName === 'test-agent-registration-table') {
           return {
             promise: jest.fn().mockResolvedValue({
-              Item: {
-                userId: 'test-user-id',
-                did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
-                status: 'active',
-              },
+              Items: [
+                {
+                  userId: 'test-user-id',
+                  did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
+                  status: 'active',
+                },
+              ],
             }),
           };
         }
-        return { promise: jest.fn().mockResolvedValue({ Item: undefined }) };
+        return { promise: jest.fn().mockResolvedValue({ Items: [] }) };
       });
 
       const result = await handler(mockEvent as APIGatewayProxyEvent);
@@ -251,18 +266,19 @@ describe('auth-refresh handler', () => {
             }),
           };
         }
+        return { promise: jest.fn().mockResolvedValue({ Item: undefined }) };
+      });
+
+      mockQueryFn.mockImplementation((params: unknown) => {
+        const p = params as { TableName: string };
         if (p.TableName === 'test-agent-registration-table') {
           return {
             promise: jest.fn().mockResolvedValue({
-              Item: {
-                userId: 'test-user-id',
-                did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
-                status: 'revoked',
-              },
+              Items: [],
             }),
           };
         }
-        return { promise: jest.fn().mockResolvedValue({ Item: undefined }) };
+        return { promise: jest.fn().mockResolvedValue({ Items: [] }) };
       });
 
       const result = await handler(mockEvent as APIGatewayProxyEvent);
@@ -292,6 +308,18 @@ describe('auth-refresh handler', () => {
         return { promise: jest.fn().mockResolvedValue({ Item: undefined }) };
       });
 
+      mockQueryFn.mockImplementation((params: unknown) => {
+        const p = params as { TableName: string };
+        if (p.TableName === 'test-agent-registration-table') {
+          return {
+            promise: jest.fn().mockResolvedValue({
+              Items: [],
+            }),
+          };
+        }
+        return { promise: jest.fn().mockResolvedValue({ Items: [] }) };
+      });
+
       const result = await handler(mockEvent as APIGatewayProxyEvent);
 
       expect(result.statusCode).toBe(401);
@@ -318,18 +346,25 @@ describe('auth-refresh handler', () => {
             }),
           };
         }
+        return { promise: jest.fn().mockResolvedValue({ Item: undefined }) };
+      });
+
+      mockQueryFn.mockImplementation((params: unknown) => {
+        const p = params as { TableName: string };
         if (p.TableName === 'test-agent-registration-table') {
           return {
             promise: jest.fn().mockResolvedValue({
-              Item: {
-                userId: 'test-user-id',
-                did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
-                status: 'active',
-              },
+              Items: [
+                {
+                  userId: 'test-user-id',
+                  did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
+                  status: 'active',
+                },
+              ],
             }),
           };
         }
-        return { promise: jest.fn().mockResolvedValue({ Item: undefined }) };
+        return { promise: jest.fn().mockResolvedValue({ Items: [] }) };
       });
 
       const result = await handler(mockEvent as APIGatewayProxyEvent);

@@ -57,6 +57,10 @@ jest.mock('jsonwebtoken', () => ({
   sign: jest.fn(() => 'mock-jwt-token'),
 }));
 
+const mockQueryFn = jest.fn((_params: unknown) => ({
+  promise: jest.fn().mockResolvedValue({ Items: [] }),
+}));
+
 const mockGetFn = jest.fn((_params: unknown) => ({
   promise: jest.fn().mockResolvedValue({ Item: undefined }),
 }));
@@ -75,6 +79,7 @@ jest.mock('aws-sdk', () => ({
       get: (...args: unknown[]) => (mockGetFn as jest.Mock)(...args),
       put: (...args: unknown[]) => (mockPutFn as jest.Mock)(...args),
       delete: (...args: unknown[]) => (mockDeleteFn as jest.Mock)(...args),
+      query: (...args: unknown[]) => (mockQueryFn as jest.Mock)(...args),
     })),
   },
 }));
@@ -101,6 +106,9 @@ describe('auth-token handler', () => {
     mockGetFn.mockImplementation(() => ({
       promise: jest.fn().mockResolvedValue({ Item: undefined }),
     }));
+    mockQueryFn.mockImplementation(() => ({
+      promise: jest.fn().mockResolvedValue({ Items: [] }),
+    }));
     mockPutFn.mockImplementation(() => ({
       promise: jest.fn().mockResolvedValue({}),
     }));
@@ -124,18 +132,25 @@ describe('auth-token handler', () => {
             }),
           };
         }
+        return { promise: jest.fn().mockResolvedValue({ Item: undefined }) };
+      });
+
+      mockQueryFn.mockImplementation((params: unknown) => {
+        const p = params as { TableName: string };
         if (p.TableName === 'test-agent-registration-table') {
           return {
             promise: jest.fn().mockResolvedValue({
-              Item: {
-                userId: 'test-user-id',
-                did: validBody.did,
-                status: 'active',
-              },
+              Items: [
+                {
+                  userId: 'test-user-id',
+                  did: validBody.did,
+                  status: 'active',
+                },
+              ],
             }),
           };
         }
-        return { promise: jest.fn().mockResolvedValue({ Item: undefined }) };
+        return { promise: jest.fn().mockResolvedValue({ Items: [] }) };
       });
 
       const result = await handler(mockEvent as APIGatewayProxyEvent);
@@ -271,18 +286,19 @@ describe('auth-token handler', () => {
             }),
           };
         }
+        return { promise: jest.fn().mockResolvedValue({ Item: undefined }) };
+      });
+
+      mockQueryFn.mockImplementation((params: unknown) => {
+        const p = params as { TableName: string };
         if (p.TableName === 'test-agent-registration-table') {
           return {
             promise: jest.fn().mockResolvedValue({
-              Item: {
-                userId: 'test-user-id',
-                did: validBody.did,
-                status: 'revoked',
-              },
+              Items: [],
             }),
           };
         }
-        return { promise: jest.fn().mockResolvedValue({ Item: undefined }) };
+        return { promise: jest.fn().mockResolvedValue({ Items: [] }) };
       });
 
       const result = await handler(mockEvent as APIGatewayProxyEvent);
@@ -305,6 +321,18 @@ describe('auth-token handler', () => {
         return { promise: jest.fn().mockResolvedValue({ Item: undefined }) };
       });
 
+      mockQueryFn.mockImplementation((params: unknown) => {
+        const p = params as { TableName: string };
+        if (p.TableName === 'test-agent-registration-table') {
+          return {
+            promise: jest.fn().mockResolvedValue({
+              Items: [],
+            }),
+          };
+        }
+        return { promise: jest.fn().mockResolvedValue({ Items: [] }) };
+      });
+
       const result = await handler(mockEvent as APIGatewayProxyEvent);
 
       expect(result.statusCode).toBe(401);
@@ -324,18 +352,25 @@ describe('auth-token handler', () => {
             }),
           };
         }
+        return { promise: jest.fn().mockResolvedValue({ Item: undefined }) };
+      });
+
+      mockQueryFn.mockImplementation((params: unknown) => {
+        const p = params as { TableName: string };
         if (p.TableName === 'test-agent-registration-table') {
           return {
             promise: jest.fn().mockResolvedValue({
-              Item: {
-                userId: 'test-user-id',
-                did: validBody.did,
-                status: 'active',
-              },
+              Items: [
+                {
+                  userId: 'test-user-id',
+                  did: validBody.did,
+                  status: 'active',
+                },
+              ],
             }),
           };
         }
-        return { promise: jest.fn().mockResolvedValue({ Item: undefined }) };
+        return { promise: jest.fn().mockResolvedValue({ Items: [] }) };
       });
 
       const result = await handler(mockEvent as APIGatewayProxyEvent);
@@ -358,18 +393,25 @@ describe('auth-token handler', () => {
             }),
           };
         }
+        return { promise: jest.fn().mockResolvedValue({ Item: undefined }) };
+      });
+
+      mockQueryFn.mockImplementation((params: unknown) => {
+        const p = params as { TableName: string };
         if (p.TableName === 'test-agent-registration-table') {
           return {
             promise: jest.fn().mockResolvedValue({
-              Item: {
-                userId: 'test-user-id',
-                did: validBody.did,
-                status: 'active',
-              },
+              Items: [
+                {
+                  userId: 'test-user-id',
+                  did: validBody.did,
+                  status: 'active',
+                },
+              ],
             }),
           };
         }
-        return { promise: jest.fn().mockResolvedValue({ Item: undefined }) };
+        return { promise: jest.fn().mockResolvedValue({ Items: [] }) };
       });
 
       await handler(mockEvent as APIGatewayProxyEvent);
@@ -397,18 +439,25 @@ describe('auth-token handler', () => {
             }),
           };
         }
+        return { promise: jest.fn().mockResolvedValue({ Item: undefined }) };
+      });
+
+      mockQueryFn.mockImplementation((params: unknown) => {
+        const p = params as { TableName: string };
         if (p.TableName === 'test-agent-registration-table') {
           return {
             promise: jest.fn().mockResolvedValue({
-              Item: {
-                userId: 'test-user-id',
-                did: validBody.did,
-                status: 'active',
-              },
+              Items: [
+                {
+                  userId: 'test-user-id',
+                  did: validBody.did,
+                  status: 'active',
+                },
+              ],
             }),
           };
         }
-        return { promise: jest.fn().mockResolvedValue({ Item: undefined }) };
+        return { promise: jest.fn().mockResolvedValue({ Items: [] }) };
       });
 
       await handler(mockEvent as APIGatewayProxyEvent);
