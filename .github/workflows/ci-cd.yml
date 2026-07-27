@@ -131,7 +131,7 @@ jobs:
     if: ${{ needs.detect-changes.outputs.functions == 'true' }}
     strategy:
       matrix:
-        function: [agent-registration, auth, agent-rotate-key, auth-challenge, auth-token, auth-refresh, auth-revoke, jwt-authorizer, agent-revoke]
+        function: [agent-registration, agent-rotate-key, auth-challenge, auth-token, auth-refresh, auth-revoke, jwt-authorizer, agent-revoke]
     steps:
       - uses: actions/checkout@v4
 
@@ -163,7 +163,7 @@ jobs:
     environment: sit
     strategy:
       matrix:
-        function: [agent-registration, auth, agent-rotate-key, auth-challenge, auth-token, auth-refresh, auth-revoke, jwt-authorizer, agent-revoke]
+        function: [agent-registration, agent-rotate-key, auth-challenge, auth-token, auth-refresh, auth-revoke, jwt-authorizer, agent-revoke]
     steps:
       - uses: actions/checkout@v4
 
