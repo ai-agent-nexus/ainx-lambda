@@ -12,43 +12,24 @@ ROLE_ARN="arn:aws:iam::${ACCOUNT_ID}:role/${ROLE_NAME}"
 
 echo "Creating Lambda functions for stage: $STAGE"
 
-# 检查并创建执行角色（如果不存在）
 if ! aws iam get-role --role-name "$ROLE_NAME" &> /dev/null; then
-  echo "  Creating execution role: $ROLE_NAME"
-  
-  # 创建信任策略
-  cat > /tmp/trust-policy.json << 'EOF'
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": {
-        "Service": "lambda.amazonaws.com"
-      },
-      "Action": "sts:AssumeRole"
-    }
-  ]
-}
-EOF
-  
-  # 创建角色
-  aws iam create-role \
-    --role-name "$ROLE_NAME" \
-    --assume-role-policy-document file:///tmp/trust-policy.json \
-    --description "AINX Lambda execution role for ${STAGE}"
-  
-  # 附加基本执行策略（CloudWatch Logs）
-  aws iam attach-role-policy \
-    --role-name "$ROLE_NAME" \
-    --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-  
-  echo "  Waiting for IAM role propagation (10 seconds)..."
-  sleep 10
-  echo "  Role $ROLE_NAME created"
-else
-  echo "  Using existing role: $ROLE_NAME"
+  echo "ERROR: Execution role not found: $ROLE_ARN"
+  echo ""
+  echo "Create the role first with AWS CLI:"
+  echo "  aws iam create-role \\"
+  echo "    --role-name $ROLE_NAME \\"
+  echo "    --assume-role-policy-document '{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"Service\":\"lambda.amazonaws.com\"},\"Action\":\"sts:AssumeRole\"}]}' \\"
+  echo "    --description 'AINX Lambda execution role for $STAGE'"
+  echo ""
+  echo "Then attach the basic execution policy:"
+  echo "  aws iam attach-role-policy \\"
+  echo "    --role-name $ROLE_NAME \\"
+  echo "    --policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+  echo ""
+  exit 1
 fi
+
+echo "  Using role: $ROLE_ARN"
 
 # 通用 Lambda 创建函数
 create_lambda() {
