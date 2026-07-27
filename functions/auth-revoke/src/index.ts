@@ -9,7 +9,7 @@ const dynamodb = new DynamoDB.DocumentClient();
 
 const REFRESH_TOKEN_TABLE_NAME = process.env.REFRESH_TOKEN_TABLE_NAME!;
 const TOKEN_BLACKLIST_TABLE_NAME = process.env.TOKEN_BLACKLIST_TABLE_NAME!;
-const JWT_PUBLIC_KEY = process.env.JWT_PUBLIC_KEY!;
+const JWT_PUBLIC_KEY = process.env.JWT_PUBLIC_KEY?.replace(/\\n/g, '\n') || '';
 const JWT_ISSUER = process.env.JWT_ISSUER || 'ainx-api';
 const BLACKLIST_TTL_SECONDS = parseInt(process.env.BLACKLIST_TTL_SECONDS || '3600', 10);
 

@@ -13,7 +13,7 @@ import crypto from 'crypto';
  */
 
 // Get API Gateway URL from environment or use default
-const API_BASE_URL = process.env.REGISTER_URL || 'http://localhost:3000';
+const API_BASE_URL = process.env.API_GATEWAY_URL || 'http://localhost:3000';
 const REGISTER_URL = `${API_BASE_URL}/agents/register`;
 const ROTATE_KEY_URL = `${API_BASE_URL}/agents/rotate-key`;
 

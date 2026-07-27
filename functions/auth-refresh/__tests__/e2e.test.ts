@@ -16,6 +16,7 @@ const API_BASE_URL = process.env.API_GATEWAY_URL || 'http://localhost:3000';
 const CHALLENGE_URL = `${API_BASE_URL}/auth/challenge`;
 const TOKEN_URL = `${API_BASE_URL}/auth/token`;
 const REFRESH_URL = `${API_BASE_URL}/auth/refresh`;
+const REGISTER_URL = `${API_BASE_URL}/agents/register`;
 
 describe('E2E: auth-refresh', () => {
   const generateValidDid = () => {
@@ -44,11 +45,31 @@ describe('E2E: auth-refresh', () => {
     return { did, signMessage };
   };
 
+  const registerDid = async (did: string, signMessage: (msg: string) => string) => {
+    const metadata = { name: 'Test Agent' };
+    const message = JSON.stringify({ did, metadata });
+    const signature = signMessage(message);
+
+    await axios.post(
+      REGISTER_URL,
+      {
+        did,
+        signature,
+        metadata,
+      },
+      {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+      }
+    );
+  };
+
   describe('Happy Path', () => {
     it('should successfully refresh token', async () => {
       const { did, signMessage } = generateValidDid();
 
-      // Get challenge
+      await registerDid(did, signMessage);
+
       const challengeResponse = await axios.post(
         CHALLENGE_URL,
         { did },

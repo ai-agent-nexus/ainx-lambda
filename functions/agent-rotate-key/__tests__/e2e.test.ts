@@ -101,30 +101,28 @@ describe('E2E: agent-rotate-key', () => {
     });
 
     it('should allow operations with new DID after rotation', async () => {
-      const { did: oldDid, signMessage } = generateValidDid();
+      const { did: oldDid, signMessage: oldSignMessage } = generateValidDid();
       const metadata = { name: 'Test Agent' };
       const message = JSON.stringify({ did: oldDid, metadata });
-      const signature = signMessage(message);
+      const signature = oldSignMessage(message);
 
-      // Register
       await axios.post(
         REGISTER_URL,
         { did: oldDid, signature, metadata },
         {
           headers: {
             'Content-Type': 'application/json',
-            Authorization: generateAuthToken(oldDid, signMessage),
+            Authorization: generateAuthToken(oldDid, oldSignMessage),
           },
           timeout: 10000,
         }
       );
 
-      // Rotate
-      const { did: newDid } = generateValidDid();
+      const { did: newDid, signMessage: newSignMessage } = generateValidDid();
       const timestamp = Math.floor(Date.now() / 1000);
       const nonce = crypto.randomUUID();
       const rotateMessage = `POST /agents/rotate-key\nrotate:${oldDid}:${newDid}:${timestamp}:${nonce}`;
-      const rotateSignature = signMessage(rotateMessage);
+      const rotateSignature = oldSignMessage(rotateMessage);
 
       await axios.post(
         ROTATE_KEY_URL,
@@ -138,18 +136,17 @@ describe('E2E: agent-rotate-key', () => {
         {
           headers: {
             'Content-Type': 'application/json',
-            Authorization: generateAuthToken(oldDid, signMessage),
+            Authorization: generateAuthToken(oldDid, oldSignMessage),
           },
           timeout: 10000,
         }
       );
 
-      // Try to rotate again with new DID
       const { did: anotherNewDid } = generateValidDid();
       const timestamp2 = Math.floor(Date.now() / 1000);
       const nonce2 = crypto.randomUUID();
       const rotateMessage2 = `POST /agents/rotate-key\nrotate:${newDid}:${anotherNewDid}:${timestamp2}:${nonce2}`;
-      const rotateSignature2 = signMessage(rotateMessage2);
+      const rotateSignature2 = newSignMessage(rotateMessage2);
 
       const secondRotateResponse = await axios.post(
         ROTATE_KEY_URL,
@@ -163,7 +160,7 @@ describe('E2E: agent-rotate-key', () => {
         {
           headers: {
             'Content-Type': 'application/json',
-            Authorization: generateAuthToken(oldDid, signMessage),
+            Authorization: generateAuthToken(newDid, newSignMessage),
           },
           timeout: 10000,
         }

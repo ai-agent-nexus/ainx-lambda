@@ -10,7 +10,7 @@ const dynamodb = new DynamoDB.DocumentClient();
 
 const REFRESH_TOKEN_TABLE_NAME = process.env.REFRESH_TOKEN_TABLE_NAME!;
 const AGENT_REGISTRATION_TABLE_NAME = process.env.AGENT_REGISTRATION_TABLE_NAME!;
-const JWT_PRIVATE_KEY = process.env.JWT_PRIVATE_KEY!;
+const JWT_PRIVATE_KEY = process.env.JWT_PRIVATE_KEY?.replace(/\\n/g, '\n') || '';
 const JWT_ISSUER = process.env.JWT_ISSUER || 'ainx-api';
 const JWT_EXPIRES_IN_SECONDS = parseInt(process.env.JWT_EXPIRES_IN_SECONDS || '3600', 10);
 const REFRESH_TOKEN_TTL_DAYS = parseInt(process.env.REFRESH_TOKEN_TTL_DAYS || '7', 10);
@@ -128,13 +128,22 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     // Verify DID is still active
     try {
       const didResult = await dynamodb
-        .get({
+        .query({
           TableName: AGENT_REGISTRATION_TABLE_NAME,
-          Key: { did },
+          IndexName: 'DidIndex',
+          KeyConditionExpression: 'did = :did',
+          FilterExpression: '#status = :status',
+          ExpressionAttributeNames: {
+            '#status': 'status',
+          },
+          ExpressionAttributeValues: {
+            ':did': did,
+            ':status': 'active',
+          },
         })
         .promise();
 
-      if (!didResult.Item || didResult.Item.status !== 'active') {
+      if (!didResult.Items || didResult.Items.length === 0) {
         logger.warn('DID not active', { did });
         return formatResponse(401, {
           error: 'DID not found or revoked',

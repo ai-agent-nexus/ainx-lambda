@@ -10,7 +10,7 @@ const dynamodb = new DynamoDB.DocumentClient();
 const AGENT_REGISTRATION_TABLE_NAME = process.env.AGENT_REGISTRATION_TABLE_NAME!;
 const DID_UNIQUENESS_TABLE_NAME = process.env.DID_UNIQUENESS_TABLE_NAME!;
 const REFRESH_TOKEN_TABLE_NAME = process.env.REFRESH_TOKEN_TABLE_NAME!;
-const JWT_PUBLIC_KEY = process.env.JWT_PUBLIC_KEY!;
+const JWT_PUBLIC_KEY = process.env.JWT_PUBLIC_KEY?.replace(/\\n/g, '\n') || '';
 const JWT_ISSUER = process.env.JWT_ISSUER || 'ainx-api';
 
 if (!AGENT_REGISTRATION_TABLE_NAME) {

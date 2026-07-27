@@ -129,7 +129,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         TableName: TABLE_NAME,
         IndexName: 'DidIndex',
         KeyConditionExpression: 'did = :did',
-        FilterExpression: 'status = :status',
+        FilterExpression: '#status = :status',
+        ExpressionAttributeNames: {
+          '#status': 'status',
+        },
         ExpressionAttributeValues: {
           ':did': oldDid,
           ':status': 'active',
@@ -223,7 +226,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
                   userId,
                   did: oldDid,
                 },
-                UpdateExpression: 'SET status = :status, revokedAt = :revokedAt',
+                UpdateExpression: 'SET #status = :status, revokedAt = :revokedAt',
+                ExpressionAttributeNames: {
+                  '#status': 'status',
+                },
                 ExpressionAttributeValues: {
                   ':status': 'revoked',
                   ':revokedAt': nowDate.toISOString(),

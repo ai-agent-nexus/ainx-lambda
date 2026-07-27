@@ -13,7 +13,7 @@ const dynamodb = new DynamoDB.DocumentClient();
 const AGENT_REGISTRATION_TABLE_NAME = process.env.AGENT_REGISTRATION_TABLE_NAME!;
 const CHALLENGE_TABLE_NAME = process.env.CHALLENGE_TABLE_NAME!;
 const REFRESH_TOKEN_TABLE_NAME = process.env.REFRESH_TOKEN_TABLE_NAME!;
-const JWT_PRIVATE_KEY = process.env.JWT_PRIVATE_KEY!;
+const JWT_PRIVATE_KEY = process.env.JWT_PRIVATE_KEY?.replace(/\\n/g, '\n') || '';
 const JWT_ISSUER = process.env.JWT_ISSUER || 'ainx-api';
 const JWT_EXPIRES_IN_SECONDS = parseInt(process.env.JWT_EXPIRES_IN_SECONDS || '3600', 10);
 const REFRESH_TOKEN_TTL_DAYS = parseInt(process.env.REFRESH_TOKEN_TTL_DAYS || '7', 10);
@@ -156,13 +156,22 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     let userId: string;
     try {
       const didResult = await dynamodb
-        .get({
+        .query({
           TableName: AGENT_REGISTRATION_TABLE_NAME,
-          Key: { did },
+          IndexName: 'DidIndex',
+          KeyConditionExpression: 'did = :did',
+          FilterExpression: '#status = :status',
+          ExpressionAttributeNames: {
+            '#status': 'status',
+          },
+          ExpressionAttributeValues: {
+            ':did': did,
+            ':status': 'active',
+          },
         })
         .promise();
 
-      if (!didResult.Item) {
+      if (!didResult.Items || didResult.Items.length === 0) {
         logger.warn('DID not found', { did });
         return formatResponse(401, {
           error: 'DID not found or revoked',
@@ -170,16 +179,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         });
       }
 
-      const status = didResult.Item.status;
-      if (status !== 'active') {
-        logger.warn('DID not active', { did, status });
-        return formatResponse(401, {
-          error: 'DID not found or revoked',
-          code: 'DID_NOT_FOUND',
-        });
-      }
-
-      userId = didResult.Item.userId as string;
+      userId = didResult.Items[0].userId as string;
     } catch (err) {
       logger.error('Error querying DID', { error: (err as Error).message, did });
       return formatResponse(500, {

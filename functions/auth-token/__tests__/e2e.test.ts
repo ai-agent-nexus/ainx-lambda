@@ -15,6 +15,7 @@ import crypto from 'crypto';
 const API_BASE_URL = process.env.API_GATEWAY_URL || 'http://localhost:3000';
 const CHALLENGE_URL = `${API_BASE_URL}/auth/challenge`;
 const TOKEN_URL = `${API_BASE_URL}/auth/token`;
+const REGISTER_URL = `${API_BASE_URL}/agents/register`;
 
 describe('E2E: auth-token', () => {
   const generateValidDid = () => {
@@ -43,11 +44,31 @@ describe('E2E: auth-token', () => {
     return { did, signMessage };
   };
 
+  const registerDid = async (did: string, signMessage: (msg: string) => string) => {
+    const metadata = { name: 'Test Agent' };
+    const message = JSON.stringify({ did, metadata });
+    const signature = signMessage(message);
+
+    await axios.post(
+      REGISTER_URL,
+      {
+        did,
+        signature,
+        metadata,
+      },
+      {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+      }
+    );
+  };
+
   describe('Happy Path', () => {
     it('should successfully generate token pair for valid DID', async () => {
       const { did, signMessage } = generateValidDid();
 
-      // First, get a challenge
+      await registerDid(did, signMessage);
+
       const challengeResponse = await axios.post(
         CHALLENGE_URL,
         { did },
@@ -195,6 +216,8 @@ describe('E2E: auth-token', () => {
   describe('Security', () => {
     it('should handle large request body', async () => {
       const { did, signMessage } = generateValidDid();
+
+      await registerDid(did, signMessage);
 
       const challengeResponse = await axios.post(
         CHALLENGE_URL,

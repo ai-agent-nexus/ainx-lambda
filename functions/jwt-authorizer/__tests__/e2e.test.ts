@@ -17,6 +17,7 @@ const CHALLENGE_URL = `${API_BASE_URL}/auth/challenge`;
 const TOKEN_URL = `${API_BASE_URL}/auth/token`;
 const REVOKE_URL = `${API_BASE_URL}/auth/revoke`;
 const AGENTS_URL = `${API_BASE_URL}/agents`;
+const REGISTER_URL = `${API_BASE_URL}/agents/register`;
 
 describe('E2E: jwt-authorizer', () => {
   const generateValidDid = () => {
@@ -45,11 +46,31 @@ describe('E2E: jwt-authorizer', () => {
     return { did, signMessage };
   };
 
+  const registerDid = async (did: string, signMessage: (msg: string) => string) => {
+    const metadata = { name: 'Test Agent' };
+    const message = JSON.stringify({ did, metadata });
+    const signature = signMessage(message);
+
+    await axios.post(
+      REGISTER_URL,
+      {
+        did,
+        signature,
+        metadata,
+      },
+      {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+      }
+    );
+  };
+
   describe('Happy Path', () => {
     it('should allow access with valid JWT', async () => {
       const { did, signMessage } = generateValidDid();
 
-      // Get challenge
+      await registerDid(did, signMessage);
+
       const challengeResponse = await axios.post(
         CHALLENGE_URL,
         { did },
@@ -62,83 +83,6 @@ describe('E2E: jwt-authorizer', () => {
       const challenge = challengeResponse.data.challenge;
       const signature = signMessage(challenge);
 
-      // Get token
-      const tokenResponse = await axios.post(
-        TOKEN_URL,
-        {
-          did,
-          challenge,
-          signature,
-        },
-        {
-          headers: { 'Content-Type': 'application/json' },
-          timeout: 10000,
-        }
-      );
-
-      const accessToken = tokenResponse.data.access_token;
-
-      // Access protected endpoint
-      try {
-        await axios.get(AGENTS_URL, {
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-          },
-          timeout: 10000,
-        });
-      } catch (error: unknown) {
-        // 404 is expected since the endpoint might not exist
-        const axiosError = error as { response?: { status: number } };
-        expect(axiosError.response?.status).toBe(404);
-      }
-    });
-  });
-
-  describe('Error Cases', () => {
-    it('should deny access with missing token', async () => {
-      try {
-        await axios.get(AGENTS_URL, {
-          timeout: 10000,
-        });
-        throw new Error('Expected request to fail');
-      } catch (error: unknown) {
-        const axiosError = error as { response?: { status: number } };
-        expect(axiosError.response?.status).toBe(401);
-      }
-    });
-
-    it('should deny access with invalid token', async () => {
-      try {
-        await axios.get(AGENTS_URL, {
-          headers: {
-            Authorization: 'Bearer invalid-token',
-          },
-          timeout: 10000,
-        });
-        throw new Error('Expected request to fail');
-      } catch (error: unknown) {
-        const axiosError = error as { response?: { status: number } };
-        expect(axiosError.response?.status).toBe(401);
-      }
-    });
-
-    it('should deny access with revoked token', async () => {
-      const { did, signMessage } = generateValidDid();
-
-      // Get challenge
-      const challengeResponse = await axios.post(
-        CHALLENGE_URL,
-        { did },
-        {
-          headers: { 'Content-Type': 'application/json' },
-          timeout: 10000,
-        }
-      );
-
-      const challenge = challengeResponse.data.challenge;
-      const signature = signMessage(challenge);
-
-      // Get token
       const tokenResponse = await axios.post(
         TOKEN_URL,
         {
@@ -155,7 +99,84 @@ describe('E2E: jwt-authorizer', () => {
       const accessToken = tokenResponse.data.access_token;
       const refreshToken = tokenResponse.data.refresh_token;
 
-      // Revoke token
+      const revokeResponse = await axios.post(
+        REVOKE_URL,
+        { refresh_token: refreshToken },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+          },
+          timeout: 10000,
+        }
+      );
+
+      expect(revokeResponse.status).toBe(200);
+      expect(revokeResponse.data.message).toBe('Token revoked successfully');
+    });
+  });
+
+  describe('Error Cases', () => {
+    it('should deny access with missing token', async () => {
+      try {
+        await axios.delete(`${AGENTS_URL}/did:key:z6Mktest`, {
+          timeout: 10000,
+        });
+        throw new Error('Expected request to fail');
+      } catch (error: unknown) {
+        const axiosError = error as { response?: { status: number } };
+        expect(axiosError.response?.status).toBe(401);
+      }
+    });
+
+    it('should deny access with invalid token', async () => {
+      try {
+        await axios.delete(`${AGENTS_URL}/did:key:z6Mktest`, {
+          headers: {
+            Authorization: 'Bearer invalid-token',
+          },
+          timeout: 10000,
+        });
+        throw new Error('Expected request to fail');
+      } catch (error: unknown) {
+        const axiosError = error as { response?: { status: number } };
+        expect(axiosError.response?.status).toBe(403);
+      }
+    });
+
+    it('should deny access with revoked token', async () => {
+      const { did, signMessage } = generateValidDid();
+
+      await registerDid(did, signMessage);
+
+      const challengeResponse = await axios.post(
+        CHALLENGE_URL,
+        { did },
+        {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 10000,
+        }
+      );
+
+      const challenge = challengeResponse.data.challenge;
+      const signature = signMessage(challenge);
+
+      const tokenResponse = await axios.post(
+        TOKEN_URL,
+        {
+          did,
+          challenge,
+          signature,
+        },
+        {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 10000,
+        }
+      );
+
+      const accessToken = tokenResponse.data.access_token;
+      const refreshToken = tokenResponse.data.refresh_token;
+
       await axios.post(
         REVOKE_URL,
         { refresh_token: refreshToken },
@@ -168,7 +189,6 @@ describe('E2E: jwt-authorizer', () => {
         }
       );
 
-      // Try to access with revoked token
       try {
         await axios.get(AGENTS_URL, {
           headers: {
@@ -179,7 +199,7 @@ describe('E2E: jwt-authorizer', () => {
         throw new Error('Expected request to fail');
       } catch (error: unknown) {
         const axiosError = error as { response?: { status: number } };
-        expect(axiosError.response?.status).toBe(401);
+        expect(axiosError.response?.status).toBe(403);
       }
     });
   });

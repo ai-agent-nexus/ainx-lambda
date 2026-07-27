@@ -7,7 +7,7 @@ const logger = new Logger('jwt-authorizer');
 const dynamodb = new DynamoDB.DocumentClient();
 
 const TOKEN_BLACKLIST_TABLE_NAME = process.env.TOKEN_BLACKLIST_TABLE_NAME!;
-const JWT_PUBLIC_KEY = process.env.JWT_PUBLIC_KEY!;
+const JWT_PUBLIC_KEY = process.env.JWT_PUBLIC_KEY?.replace(/\\n/g, '\n') || '';
 const JWT_ISSUER = process.env.JWT_ISSUER || 'ainx-api';
 
 if (!TOKEN_BLACKLIST_TABLE_NAME) {
@@ -48,10 +48,12 @@ export const handler = async (
       return generateDenyAllPolicy();
     }
 
+    const actualToken = token.startsWith('Bearer ') ? token.slice(7) : token;
+
     // Verify JWT
     let decodedToken: JwtPayload;
     try {
-      decodedToken = jwt.verify(token, JWT_PUBLIC_KEY, {
+      decodedToken = jwt.verify(actualToken, JWT_PUBLIC_KEY, {
         algorithms: ['RS256'],
         issuer: JWT_ISSUER,
       }) as JwtPayload;

@@ -16,6 +16,7 @@ const API_BASE_URL = process.env.API_GATEWAY_URL || 'http://localhost:3000';
 const CHALLENGE_URL = `${API_BASE_URL}/auth/challenge`;
 const TOKEN_URL = `${API_BASE_URL}/auth/token`;
 const REVOKE_URL = `${API_BASE_URL}/auth/revoke`;
+const REGISTER_URL = `${API_BASE_URL}/agents/register`;
 
 describe('E2E: auth-revoke', () => {
   const generateValidDid = () => {
@@ -44,11 +45,31 @@ describe('E2E: auth-revoke', () => {
     return { did, signMessage };
   };
 
+  const registerDid = async (did: string, signMessage: (msg: string) => string) => {
+    const metadata = { name: 'Test Agent' };
+    const message = JSON.stringify({ did, metadata });
+    const signature = signMessage(message);
+
+    await axios.post(
+      REGISTER_URL,
+      {
+        did,
+        signature,
+        metadata,
+      },
+      {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+      }
+    );
+  };
+
   describe('Happy Path', () => {
     it('should successfully revoke token', async () => {
       const { did, signMessage } = generateValidDid();
 
-      // Get challenge
+      await registerDid(did, signMessage);
+
       const challengeResponse = await axios.post(
         CHALLENGE_URL,
         { did },
@@ -98,7 +119,8 @@ describe('E2E: auth-revoke', () => {
     it('should revoke without refresh token', async () => {
       const { did, signMessage } = generateValidDid();
 
-      // Get challenge
+      await registerDid(did, signMessage);
+
       const challengeResponse = await axios.post(
         CHALLENGE_URL,
         { did },
@@ -111,7 +133,6 @@ describe('E2E: auth-revoke', () => {
       const challenge = challengeResponse.data.challenge;
       const signature = signMessage(challenge);
 
-      // Get token
       const tokenResponse = await axios.post(
         TOKEN_URL,
         {
@@ -127,7 +148,6 @@ describe('E2E: auth-revoke', () => {
 
       const accessToken = tokenResponse.data.access_token;
 
-      // Revoke token without refresh token
       const revokeResponse = await axios.post(
         REVOKE_URL,
         {},
@@ -158,13 +178,13 @@ describe('E2E: auth-revoke', () => {
         );
         throw new Error('Expected request to fail');
       } catch (error: unknown) {
-        const axiosError = error as { response?: { status: number; data: { code: string } } };
+        const axiosError = error as { response?: { status: number; data: { message: string } } };
         expect(axiosError.response?.status).toBe(401);
-        expect(axiosError.response?.data.code).toBe('INVALID_TOKEN');
+        expect(axiosError.response?.data.message).toBe('Unauthorized');
       }
     });
 
-    it('should return 401 for invalid token', async () => {
+    it('should return 403 for invalid token', async () => {
       try {
         await axios.post(
           REVOKE_URL,
@@ -179,9 +199,9 @@ describe('E2E: auth-revoke', () => {
         );
         throw new Error('Expected request to fail');
       } catch (error: unknown) {
-        const axiosError = error as { response?: { status: number; data: { code: string } } };
-        expect(axiosError.response?.status).toBe(401);
-        expect(axiosError.response?.data.code).toBe('INVALID_TOKEN');
+        const axiosError = error as { response?: { status: number; data: { Message: string } } };
+        expect(axiosError.response?.status).toBe(403);
+        expect(axiosError.response?.data.Message).toBe('User is not authorized to access this resource with an explicit deny in an identity-based policy');
       }
     });
   });
