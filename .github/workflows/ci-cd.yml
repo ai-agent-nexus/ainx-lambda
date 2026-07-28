@@ -72,7 +72,12 @@ jobs:
         run: npm install
 
       - name: Build workspace packages
-        run: npm run build --workspaces
+        run: |
+          cd packages/connection-utils && npm run build
+          cd ../crypto-utils && npm run build
+          cd ../did-utils && npm run build
+          cd ../logger && npm run build
+          cd ../shared-utils && npm run build
 
       - name: Run TypeScript compiler
         run: npx tsc --noEmit
@@ -93,7 +98,12 @@ jobs:
         run: npm install
 
       - name: Build workspace packages
-        run: npm run build --workspaces
+        run: |
+          cd packages/connection-utils && npm run build
+          cd ../crypto-utils && npm run build
+          cd ../did-utils && npm run build
+          cd ../logger && npm run build
+          cd ../shared-utils && npm run build
 
       - name: Run tests with coverage
         run: npm run test:coverage
@@ -121,7 +131,12 @@ jobs:
         run: npm install
 
       - name: Build workspace packages
-        run: npm run build --workspaces
+        run: |
+          cd packages/connection-utils && npm run build
+          cd ../crypto-utils && npm run build
+          cd ../did-utils && npm run build
+          cd ../logger && npm run build
+          cd ../shared-utils && npm run build
 
       - name: Run integration tests
         run: npm run test:integration
@@ -156,7 +171,12 @@ jobs:
         run: npm install
 
       - name: Build workspace packages
-        run: npm run build --workspaces
+        run: |
+          cd packages/connection-utils && npm run build
+          cd ../crypto-utils && npm run build
+          cd ../did-utils && npm run build
+          cd ../logger && npm run build
+          cd ../shared-utils && npm run build
 
       - name: Build ${{ matrix.function }}
         run: |
