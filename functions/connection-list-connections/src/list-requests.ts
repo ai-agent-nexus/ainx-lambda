@@ -2,7 +2,7 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { DynamoDB } from 'aws-sdk';
 import { Logger } from '@ainx/logger';
 import { formatResponse } from '@ainx/shared-utils';
-import { ConnectionStatus, ConnectionRequestStatus } from '@ainx/connection-utils';
+import { ConnectionRequestStatus } from '@ainx/connection-utils';
 
 const logger = new Logger('list-requests');
 const dynamodb = new DynamoDB.DocumentClient();

@@ -183,15 +183,17 @@ describe('remove-connection handler', () => {
 
       expect(result.statusCode).toBe(200);
       expect(mockTransactWriteFn).toHaveBeenCalled();
-      const transactParams = (mockTransactWriteFn.mock.calls[0] as unknown[])[0] as { TransactItems: Array<{ Update: { Key: Record<string, string> } }> };
+      const transactParams = (mockTransactWriteFn.mock.calls[0] as unknown[])[0] as {
+        TransactItems: Array<{ Update: { Key: Record<string, string> } }>;
+      };
       expect(transactParams.TransactItems).toHaveLength(2);
-      
+
       // Check first update (user -> connection)
       expect(transactParams.TransactItems[0].Update.Key).toEqual({
         userId: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
         connectionId: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ_other',
       });
-      
+
       // Check second update (connection -> user, reversed)
       expect(transactParams.TransactItems[1].Update.Key).toEqual({
         userId: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ_other',

@@ -19,7 +19,12 @@ const CONNECTIONS_TABLE_NAME = process.env.CONNECTIONS_TABLE_NAME!;
 const INVITATIONS_TABLE_NAME = process.env.INVITATIONS_TABLE_NAME!;
 const AGENT_REGISTRATION_TABLE_NAME = process.env.AGENT_REGISTRATION_TABLE_NAME!;
 
-if (!CONNECTION_REQUESTS_TABLE_NAME || !CONNECTIONS_TABLE_NAME || !INVITATIONS_TABLE_NAME || !AGENT_REGISTRATION_TABLE_NAME) {
+if (
+  !CONNECTION_REQUESTS_TABLE_NAME ||
+  !CONNECTIONS_TABLE_NAME ||
+  !INVITATIONS_TABLE_NAME ||
+  !AGENT_REGISTRATION_TABLE_NAME
+) {
   throw new Error('Required environment variables are missing');
 }
 
@@ -46,7 +51,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       });
     }
 
-    const validation = validateInput(body as unknown as Record<string, unknown>, ['toDid', 'invitationCode']);
+    const validation = validateInput(body as unknown as Record<string, unknown>, [
+      'toDid',
+      'invitationCode',
+    ]);
     if (!validation.valid) {
       logger.warn('Missing required fields', { missing: validation.missingFields });
       return formatResponse(400, {

@@ -1,11 +1,10 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { DynamoDB } from 'aws-sdk';
 import { Logger } from '@ainx/logger';
-import { formatResponse, parseBody, validateInput } from '@ainx/shared-utils';
+import { formatResponse, parseBody } from '@ainx/shared-utils';
 import {
   generateInvitationCode,
   calculateInvitationExpiration,
-  isValidInvitationCode,
   CreateInvitationRequest,
   MAX_INVITATION_TTL_SECONDS,
 } from '@ainx/connection-utils';
@@ -44,7 +43,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const { expiresInSeconds } = body;
 
     if (expiresInSeconds !== undefined && expiresInSeconds > MAX_INVITATION_TTL_SECONDS) {
-      logger.warn('Expiration time exceeds maximum', { expiresInSeconds, max: MAX_INVITATION_TTL_SECONDS });
+      logger.warn('Expiration time exceeds maximum', {
+        expiresInSeconds,
+        max: MAX_INVITATION_TTL_SECONDS,
+      });
       return formatResponse(400, {
         error: `Expiration time cannot exceed ${MAX_INVITATION_TTL_SECONDS} seconds`,
         code: 'INVALID_EXPIRATION',

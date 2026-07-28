@@ -7,6 +7,7 @@ import { APIGatewayProxyEvent } from 'aws-lambda';
 import { handler as createInvitationHandler } from '../functions/connection-create-invitation/src/index';
 import { handler as sendRequestHandler } from '../functions/connection-send-request/src/index';
 import { handler as acceptRequestHandler } from '../functions/connection-accept-request/src/index';
+import { handler as rejectHandler } from '../functions/connection-accept-request/src/reject';
 import { handler as listConnectionsHandler } from '../functions/connection-list-connections/src/index';
 import { handler as removeConnectionHandler } from '../functions/connection-remove-connection/src/index';
 
@@ -40,7 +41,9 @@ jest.mock('@ainx/shared-utils', () => ({
 }));
 
 jest.mock('@ainx/connection-utils', () => ({
-  generateInvitationCode: jest.fn(() => `inv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`),
+  generateInvitationCode: jest.fn(
+    () => `inv_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+  ),
   calculateInvitationExpiration: jest.fn((expiresInSeconds?: number) => {
     const seconds = expiresInSeconds || 1800;
     const expiresAt = new Date(Date.now() + seconds * 1000).toISOString();
@@ -143,48 +146,61 @@ jest.mock('aws-sdk', () => ({
           return Promise.resolve({});
         }),
       })),
-      query: jest.fn((params: { TableName: string; KeyConditionExpression?: string; ExpressionAttributeValues?: Record<string, unknown> }) => ({
-        promise: jest.fn().mockImplementation(() => {
-          const { TableName, ExpressionAttributeValues } = params;
-          if (TableName.includes('connections') && !TableName.includes('requests')) {
-            const userId = ExpressionAttributeValues?.[':userId'] as string;
-            const statusFilter = ExpressionAttributeValues?.[':status'] as string;
-            let items = Array.from(connectionsState.values()).filter(
-              (item) => item.userId === userId
-            );
-            if (statusFilter) {
-              items = items.filter((item) => item.status === statusFilter);
+      query: jest.fn(
+        (params: {
+          TableName: string;
+          KeyConditionExpression?: string;
+          ExpressionAttributeValues?: Record<string, unknown>;
+        }) => ({
+          promise: jest.fn().mockImplementation(() => {
+            const { TableName, ExpressionAttributeValues } = params;
+            if (TableName.includes('connections') && !TableName.includes('requests')) {
+              const userId = ExpressionAttributeValues?.[':userId'] as string;
+              const statusFilter = ExpressionAttributeValues?.[':status'] as string;
+              let items = Array.from(connectionsState.values()).filter(
+                (item) => item.userId === userId
+              );
+              if (statusFilter) {
+                items = items.filter((item) => item.status === statusFilter);
+              }
+              return Promise.resolve({ Items: items, Count: items.length });
+            } else if (TableName.includes('connection-requests')) {
+              const toDid = ExpressionAttributeValues?.[':toDid'] as string;
+              const items = Array.from(requestsState.values()).filter(
+                (item) => item.toDid === toDid && item.status === 'PENDING'
+              );
+              return Promise.resolve({ Items: items, Count: items.length });
+            } else if (TableName.includes('agent-registration')) {
+              const did = ExpressionAttributeValues?.[':did'] as string;
+              const items = Array.from(agentRegistrationState.values()).filter(
+                (item) => item.did === did
+              );
+              return Promise.resolve({ Items: items, Count: items.length });
             }
-            return Promise.resolve({ Items: items, Count: items.length });
-          } else if (TableName.includes('connection-requests')) {
-            const toDid = ExpressionAttributeValues?.[':toDid'] as string;
-            const items = Array.from(requestsState.values()).filter(
-              (item) => item.toDid === toDid && item.status === 'PENDING'
-            );
-            return Promise.resolve({ Items: items, Count: items.length });
-          } else if (TableName.includes('agent-registration')) {
-            const did = ExpressionAttributeValues?.[':did'] as string;
-            const items = Array.from(agentRegistrationState.values()).filter(
-              (item) => item.did === did
-            );
-            return Promise.resolve({ Items: items, Count: items.length });
-          }
-          return Promise.resolve({ Items: [], Count: 0 });
-        }),
-      })),
-      update: jest.fn((params: { TableName: string; Key: Record<string, unknown>; UpdateExpression: string; ExpressionAttributeValues: Record<string, unknown> }) => ({
-        promise: jest.fn().mockImplementation(() => {
-          const { TableName, Key, ExpressionAttributeValues } = params;
-          if (TableName.includes('connection-requests')) {
-            const item = requestsState.get(Key.requestId as string);
-            if (item) {
-              item.status = ExpressionAttributeValues[':status'] as string;
-              item.updatedAt = ExpressionAttributeValues[':updatedAt'] as string;
+            return Promise.resolve({ Items: [], Count: 0 });
+          }),
+        })
+      ),
+      update: jest.fn(
+        (params: {
+          TableName: string;
+          Key: Record<string, unknown>;
+          UpdateExpression: string;
+          ExpressionAttributeValues: Record<string, unknown>;
+        }) => ({
+          promise: jest.fn().mockImplementation(() => {
+            const { TableName, Key, ExpressionAttributeValues } = params;
+            if (TableName.includes('connection-requests')) {
+              const item = requestsState.get(Key.requestId as string);
+              if (item) {
+                item.status = ExpressionAttributeValues[':status'] as string;
+                item.updatedAt = ExpressionAttributeValues[':updatedAt'] as string;
+              }
             }
-          }
-          return Promise.resolve({});
-        }),
-      })),
+            return Promise.resolve({});
+          }),
+        })
+      ),
       transactWrite: jest.fn((params: { TransactItems: Array<Record<string, unknown>> }) => ({
         promise: jest.fn().mockImplementation(() => {
           const { TransactItems } = params;
@@ -316,7 +332,9 @@ describe('Integration: Connection Flow', () => {
         queryStringParameters: {},
       };
 
-      const listSenderResult = await listConnectionsHandler(listSenderEvent as APIGatewayProxyEvent);
+      const listSenderResult = await listConnectionsHandler(
+        listSenderEvent as APIGatewayProxyEvent
+      );
       expect(listSenderResult.statusCode).toBe(200);
       const listSenderBody = JSON.parse(listSenderResult.body);
       expect(listSenderBody.connections).toHaveLength(1);
@@ -333,7 +351,9 @@ describe('Integration: Connection Flow', () => {
         queryStringParameters: {},
       };
 
-      const listReceiverResult = await listConnectionsHandler(listReceiverEvent as APIGatewayProxyEvent);
+      const listReceiverResult = await listConnectionsHandler(
+        listReceiverEvent as APIGatewayProxyEvent
+      );
       expect(listReceiverResult.statusCode).toBe(200);
       const listReceiverBody = JSON.parse(listReceiverResult.body);
       expect(listReceiverBody.connections).toHaveLength(1);
@@ -363,7 +383,9 @@ describe('Integration: Connection Flow', () => {
         queryStringParameters: {},
       };
 
-      const listAfterRemoveResult = await listConnectionsHandler(listAfterRemoveEvent as APIGatewayProxyEvent);
+      const listAfterRemoveResult = await listConnectionsHandler(
+        listAfterRemoveEvent as APIGatewayProxyEvent
+      );
       expect(listAfterRemoveResult.statusCode).toBe(200);
       const listAfterRemoveBody = JSON.parse(listAfterRemoveResult.body);
       expect(listAfterRemoveBody.connections).toHaveLength(0);
@@ -611,7 +633,6 @@ describe('Integration: Connection Flow', () => {
       const reqId = JSON.parse(sendResult.body).requestId;
 
       // Reject request
-      const { handler: rejectHandler } = require('../functions/connection-accept-request/src/reject');
       const rejectEvent: Partial<APIGatewayProxyEvent> = {
         path: `/connections/requests/${reqId}/reject`,
         httpMethod: 'POST',

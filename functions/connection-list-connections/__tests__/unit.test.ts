@@ -127,7 +127,9 @@ describe('list-connections handler', () => {
 
     it('should handle nextToken parameter', async () => {
       mockEvent.queryStringParameters = {
-        nextToken: Buffer.from(JSON.stringify({ userId: 'test', connectionId: 'test' })).toString('base64'),
+        nextToken: Buffer.from(JSON.stringify({ userId: 'test', connectionId: 'test' })).toString(
+          'base64'
+        ),
       };
 
       mockQueryFn.mockImplementation(() => ({

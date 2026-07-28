@@ -79,7 +79,7 @@ describe('E2E: Connection Management', () => {
         {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${senderToken}`,
+            Authorization: `Bearer ${senderToken}`,
           },
           timeout: 10000,
         }
@@ -101,7 +101,7 @@ describe('E2E: Connection Management', () => {
         {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${senderToken}`,
+            Authorization: `Bearer ${senderToken}`,
           },
           timeout: 10000,
         }
@@ -119,7 +119,7 @@ describe('E2E: Connection Management', () => {
         {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${receiverToken}`,
+            Authorization: `Bearer ${receiverToken}`,
           },
           timeout: 10000,
         }
@@ -132,7 +132,7 @@ describe('E2E: Connection Management', () => {
     it('should list connections for sender', async () => {
       const response = await axios.get(CONNECTIONS_URL, {
         headers: {
-          'Authorization': `Bearer ${senderToken}`,
+          Authorization: `Bearer ${senderToken}`,
         },
         timeout: 10000,
       });
@@ -147,7 +147,7 @@ describe('E2E: Connection Management', () => {
     it('should list connections for receiver', async () => {
       const response = await axios.get(CONNECTIONS_URL, {
         headers: {
-          'Authorization': `Bearer ${receiverToken}`,
+          Authorization: `Bearer ${receiverToken}`,
         },
         timeout: 10000,
       });
@@ -159,15 +159,12 @@ describe('E2E: Connection Management', () => {
     });
 
     it('should remove a connection', async () => {
-      const response = await axios.delete(
-        `${CONNECTIONS_URL}/${receiver.did}`,
-        {
-          headers: {
-            'Authorization': `Bearer ${senderToken}`,
-          },
-          timeout: 10000,
-        }
-      );
+      const response = await axios.delete(`${CONNECTIONS_URL}/${receiver.did}`, {
+        headers: {
+          Authorization: `Bearer ${senderToken}`,
+        },
+        timeout: 10000,
+      });
 
       expect(response.status).toBe(200);
       expect(response.data.status).toBe('DISCONNECTED');
@@ -176,7 +173,7 @@ describe('E2E: Connection Management', () => {
     it('should show empty connections after removal', async () => {
       const response = await axios.get(CONNECTIONS_URL, {
         headers: {
-          'Authorization': `Bearer ${senderToken}`,
+          Authorization: `Bearer ${senderToken}`,
         },
         timeout: 10000,
       });
@@ -194,7 +191,7 @@ describe('E2E: Connection Management', () => {
         {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${senderToken}`,
+            Authorization: `Bearer ${senderToken}`,
           },
           timeout: 10000,
         }
@@ -212,7 +209,7 @@ describe('E2E: Connection Management', () => {
           {
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${senderToken}`,
+              Authorization: `Bearer ${senderToken}`,
             },
             timeout: 10000,
           }
@@ -231,7 +228,7 @@ describe('E2E: Connection Management', () => {
         {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${senderToken}`,
+            Authorization: `Bearer ${senderToken}`,
           },
           timeout: 10000,
         }
@@ -248,7 +245,7 @@ describe('E2E: Connection Management', () => {
         {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${senderToken}`,
+            Authorization: `Bearer ${senderToken}`,
           },
           timeout: 10000,
         }
@@ -264,7 +261,7 @@ describe('E2E: Connection Management', () => {
           {
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${senderToken}`,
+              Authorization: `Bearer ${senderToken}`,
             },
             timeout: 10000,
           }
@@ -286,7 +283,7 @@ describe('E2E: Connection Management', () => {
         {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${senderToken}`,
+            Authorization: `Bearer ${senderToken}`,
           },
           timeout: 10000,
         }
@@ -303,7 +300,7 @@ describe('E2E: Connection Management', () => {
         {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${senderToken}`,
+            Authorization: `Bearer ${senderToken}`,
           },
           timeout: 10000,
         }
@@ -318,7 +315,7 @@ describe('E2E: Connection Management', () => {
           {
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${otherToken}`,
+              Authorization: `Bearer ${otherToken}`,
             },
             timeout: 10000,
           }
@@ -337,7 +334,7 @@ describe('E2E: Connection Management', () => {
         {
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${senderToken}`,
+            Authorization: `Bearer ${senderToken}`,
           },
           timeout: 10000,
         }
@@ -358,7 +355,7 @@ describe('E2E: Connection Management', () => {
           {
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${senderToken}`,
+              Authorization: `Bearer ${senderToken}`,
             },
             timeout: 10000,
           }
@@ -381,7 +378,7 @@ describe('E2E: Connection Management', () => {
           {
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${senderToken}`,
+              Authorization: `Bearer ${senderToken}`,
             },
             timeout: 10000,
           }
@@ -403,7 +400,7 @@ describe('E2E: Connection Management', () => {
           {
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': `Bearer ${senderToken}`,
+              Authorization: `Bearer ${senderToken}`,
             },
             timeout: 10000,
           }
@@ -438,7 +435,7 @@ describe('E2E: Connection Management', () => {
     it('should handle limit parameter', async () => {
       const response = await axios.get(`${CONNECTIONS_URL}?limit=5`, {
         headers: {
-          'Authorization': `Bearer ${senderToken}`,
+          Authorization: `Bearer ${senderToken}`,
         },
         timeout: 10000,
       });
@@ -450,7 +447,7 @@ describe('E2E: Connection Management', () => {
     it('should return nextToken when more results exist', async () => {
       const response = await axios.get(`${CONNECTIONS_URL}?limit=1`, {
         headers: {
-          'Authorization': `Bearer ${senderToken}`,
+          Authorization: `Bearer ${senderToken}`,
         },
         timeout: 10000,
       });

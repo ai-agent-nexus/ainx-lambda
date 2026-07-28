@@ -57,7 +57,11 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
 
     if (connectionResult.Item.status !== ConnectionStatus.CONNECTED) {
-      logger.warn('Connection not active', { userId, connectionId, status: connectionResult.Item.status });
+      logger.warn('Connection not active', {
+        userId,
+        connectionId,
+        status: connectionResult.Item.status,
+      });
       return formatResponse(400, {
         error: 'Connection is not active',
         code: 'CONNECTION_NOT_ACTIVE',

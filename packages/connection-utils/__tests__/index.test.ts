@@ -1,6 +1,4 @@
 import {
-  ConnectionStatus,
-  ConnectionRequestStatus,
   generateInvitationCode,
   isValidInvitationCode,
   calculateInvitationExpiration,

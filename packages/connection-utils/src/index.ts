@@ -1,3 +1,5 @@
+import { randomUUID } from 'crypto';
+
 /**
  * Connection status enum
  */
@@ -128,7 +130,7 @@ export const MAX_INVITATION_TTL_SECONDS = 86400; // 24 hours
  * Generate invitation code
  */
 export function generateInvitationCode(): string {
-  return crypto.randomUUID();
+  return randomUUID();
 }
 
 /**
@@ -142,9 +144,10 @@ export function isValidInvitationCode(code: string): boolean {
 /**
  * Calculate invitation expiration time
  */
-export function calculateInvitationExpiration(
-  expiresInSeconds?: number
-): { expiresAt: string; ttl: number } {
+export function calculateInvitationExpiration(expiresInSeconds?: number): {
+  expiresAt: string;
+  ttl: number;
+} {
   const duration = Math.min(
     Math.max(expiresInSeconds || DEFAULT_INVITATION_TTL_SECONDS, 1),
     MAX_INVITATION_TTL_SECONDS
