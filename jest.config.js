@@ -28,6 +28,7 @@ module.exports = {
   clearMocks: true,
   testTimeout: 10000,
   moduleNameMapper: {
+    '^@ainx/connection-utils$': path.resolve(__dirname, 'packages/connection-utils/src/index.ts'),
     '^@ainx/logger$': path.resolve(__dirname, 'packages/logger/index.ts'),
     '^@ainx/shared-utils$': path.resolve(__dirname, 'packages/shared-utils/index.ts'),
     '^@ainx/crypto-utils$': path.resolve(__dirname, 'packages/crypto-utils/src/index.ts'),

@@ -22,6 +22,7 @@
     "deploy:agent-registration": "cd functions/agent-registration && npm run build && npm run package && aws lambda update-function-code --function-name agent-registration --zip-file fileb://dist/index.zip"
   },
   "devDependencies": {
+    "@ainx/connection-utils": "*",
     "@ainx/crypto-utils": "*",
     "@ainx/did-utils": "*",
     "@types/aws-lambda": "^8.10.149",
