@@ -18,6 +18,9 @@ const API_BASE_URL = process.env.API_GATEWAY_URL || 'http://localhost:3000';
 const INVITATIONS_URL = `${API_BASE_URL}/connections/invitations`;
 const REQUESTS_URL = `${API_BASE_URL}/connections/requests`;
 const CONNECTIONS_URL = `${API_BASE_URL}/connections`;
+const REGISTER_URL = `${API_BASE_URL}/agents/register`;
+const CHALLENGE_URL = `${API_BASE_URL}/auth/challenge`;
+const TOKEN_URL = `${API_BASE_URL}/auth/token`;
 
 describe('E2E: Connection Management', () => {
   // Generate a valid did:key with proper signature
@@ -49,12 +52,52 @@ describe('E2E: Connection Management', () => {
     return { did, signMessage };
   };
 
-  const generateAuthToken = (did: string, signMessage: (msg: string) => string): string => {
-    const timestamp = Math.floor(Date.now() / 1000);
-    const nonce = crypto.randomUUID();
-    const authMessage = `auth:${did}:${timestamp}:${nonce}`;
-    const authSignature = signMessage(authMessage);
-    return `${did}:${authSignature}:${timestamp}:${nonce}`;
+  const getJwtToken = async (did: string, signMessage: (msg: string) => string) => {
+    const challengeResponse = await axios.post(
+      CHALLENGE_URL,
+      { did },
+      {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+      }
+    );
+
+    const challenge = challengeResponse.data.challenge;
+    const signature = signMessage(challenge);
+
+    const tokenResponse = await axios.post(
+      TOKEN_URL,
+      {
+        did,
+        challenge,
+        signature,
+      },
+      {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+      }
+    );
+
+    return tokenResponse.data.access_token;
+  };
+
+  const registerAgent = async (did: string, signMessage: (msg: string) => string) => {
+    const metadata = { name: 'Test Agent' };
+    const message = JSON.stringify({ did, metadata });
+    const signature = signMessage(message);
+
+    await axios.post(
+      REGISTER_URL,
+      {
+        did,
+        signature,
+        metadata,
+      },
+      {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+      }
+    );
   };
 
   let sender: { did: string; signMessage: (msg: string) => string };
@@ -64,11 +107,13 @@ describe('E2E: Connection Management', () => {
   let invitationCode: string;
   let requestId: string;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     sender = generateValidDid();
     receiver = generateValidDid();
-    senderToken = generateAuthToken(sender.did, sender.signMessage);
-    receiverToken = generateAuthToken(receiver.did, receiver.signMessage);
+    await registerAgent(sender.did, sender.signMessage);
+    await registerAgent(receiver.did, receiver.signMessage);
+    senderToken = await getJwtToken(sender.did, sender.signMessage);
+    receiverToken = await getJwtToken(receiver.did, receiver.signMessage);
   });
 
   describe('Happy Path', () => {
@@ -275,7 +320,8 @@ describe('E2E: Connection Management', () => {
 
     it('should reject non-target user accepting request', async () => {
       const other = generateValidDid();
-      const otherToken = generateAuthToken(other.did, other.signMessage);
+      await registerAgent(other.did, other.signMessage);
+      const otherToken = await getJwtToken(other.did, other.signMessage);
 
       const createResponse = await axios.post(
         INVITATIONS_URL,
