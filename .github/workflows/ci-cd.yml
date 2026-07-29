@@ -201,7 +201,7 @@ jobs:
 
   deploy-sit:
     runs-on: ubuntu-latest
-    needs: [build]
+    needs: [build, detect-changes]
     if: github.event_name == 'pull_request' && needs.detect-changes.outputs.function-matrix != '[]'
     environment: sit
     strategy:
