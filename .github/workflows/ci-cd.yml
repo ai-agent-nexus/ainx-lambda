@@ -24,7 +24,7 @@ jobs:
       infra: ${{ steps.filter.outputs.infra }}
       function-matrix: ${{ steps.build-matrix.outputs.function-matrix }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: dorny/paths-filter@v3
         id: filter
@@ -49,10 +49,10 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
 
@@ -69,10 +69,10 @@ jobs:
   type-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
 
@@ -95,10 +95,10 @@ jobs:
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.packages == 'true' || needs.detect-changes.outputs.functions == 'true' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
 
@@ -128,10 +128,10 @@ jobs:
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.functions == 'true' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
 
@@ -153,7 +153,7 @@ jobs:
   security:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Run npm audit
         run: npm audit --audit-level=moderate
@@ -168,10 +168,10 @@ jobs:
       matrix:
         function: ${{ fromJson(needs.detect-changes.outputs.function-matrix) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
 
@@ -194,7 +194,7 @@ jobs:
           zip -r index.zip index.js
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.function }}-build
           path: functions/${{ matrix.function }}/dist/
@@ -208,7 +208,7 @@ jobs:
       matrix:
         function: ${{ fromJson(needs.detect-changes.outputs.function-matrix) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -218,7 +218,7 @@ jobs:
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Download ${{ matrix.function }} build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v6
         with:
           name: ${{ matrix.function }}-build
           path: functions/${{ matrix.function }}/dist/
@@ -235,7 +235,7 @@ jobs:
     if: github.event_name == 'pull_request'
     environment: sit
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -263,10 +263,10 @@ jobs:
     if: github.event_name == 'pull_request'
     environment: sit
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
 
@@ -310,7 +310,7 @@ jobs:
   #     matrix:
   #       function: [agent-registration]
   #   steps:
-  #     - uses: actions/checkout@v4
+  #     - uses: actions/checkout@v6
   #
   #     - name: Configure AWS credentials
   #       uses: aws-actions/configure-aws-credentials@v4
@@ -320,7 +320,7 @@ jobs:
   #         aws-region: ${{ env.AWS_REGION }}
   #
   #     - name: Download build artifacts
-  #       uses: actions/download-artifact@v4
+  #       uses: actions/download-artifact@v6
   #       with:
   #         name: ${{ matrix.function }}-build
   #         path: functions/${{ matrix.function }}/dist/
@@ -340,7 +340,7 @@ jobs:
   #     matrix:
   #       function: [agent-registration]
   #   steps:
-  #     - uses: actions/checkout@v4
+  #     - uses: actions/checkout@v6
   #
   #     - name: Configure AWS credentials
   #       uses: aws-actions/configure-aws-credentials@v4
@@ -350,7 +350,7 @@ jobs:
   #         aws-region: ${{ env.AWS_REGION }}
   #
   #     - name: Download build artifacts
-  #       uses: actions/download-artifact@v4
+  #       uses: actions/download-artifact@v6
   #       with:
   #         name: ${{ matrix.function }}-build
   #         path: functions/${{ matrix.function }}/dist/
