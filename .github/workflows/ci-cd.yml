@@ -42,29 +42,8 @@ jobs:
       - name: Build function matrix
         id: build-matrix
         run: |
-          # Extract unique function names from changed files
           changed_files='${{ steps.filter.outputs.functions_files }}'
-          if [ -z "$changed_files" ] || [ "$changed_files" = "[]" ]; then
-            # If no function files changed but functions filter matched (e.g., directory deletion)
-            # fallback to empty matrix
-            echo "function-matrix=[]" >> $GITHUB_OUTPUT
-            exit 0
-          fi
-          
-          # Parse changed files and extract function names
-          matrix=$(echo "$changed_files" | python3 -c "
-import json
-import sys
-files = json.load(sys.stdin)
-functions = set()
-for f in files:
-    parts = f.split('/')
-    if len(parts) >= 2 and parts[0] == 'functions':
-        functions.add(parts[1])
-print(json.dumps(sorted(list(functions))))
-")
-          echo "function-matrix=$matrix" >> $GITHUB_OUTPUT
-          echo "Changed functions: $matrix"
+          python3 scripts/build-function-matrix.py "$changed_files"
 
   # Lint and format check
   lint:
