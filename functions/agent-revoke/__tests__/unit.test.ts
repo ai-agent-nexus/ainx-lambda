@@ -278,7 +278,10 @@ describe('agent-revoke handler', () => {
       expect(mockUpdateFn).toHaveBeenCalledWith(
         expect.objectContaining({
           TableName: 'test-agent-registration-table',
-          Key: { did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ' },
+          Key: {
+            userId: 'test-user-id',
+            did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
+          },
           UpdateExpression: 'SET #status = :status, revokedAt = :revokedAt, updatedAt = :updatedAt',
           ExpressionAttributeNames: {
             '#status': 'status',

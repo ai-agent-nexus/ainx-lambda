@@ -58,7 +58,8 @@ const mockGetFn = jest.fn((_params: unknown) => {
 
   if (tableName.includes('agent-registration')) {
     const did = key.did as string;
-    const item = dynamoDBState.agents.get(did);
+    const userId = key.userId as string;
+    const item = dynamoDBState.agents.get(`${userId}:${did}`);
     return {
       promise: jest.fn().mockResolvedValue({ Item: item }),
     };
@@ -81,7 +82,8 @@ const mockUpdateFn = jest.fn((_params: unknown) => {
 
   if (tableName.includes('agent-registration')) {
     const did = key.did as string;
-    const existing = dynamoDBState.agents.get(did) as Record<string, unknown>;
+    const userId = key.userId as string;
+    const existing = dynamoDBState.agents.get(`${userId}:${did}`) as Record<string, unknown>;
     if (existing) {
       existing.status = params.ExpressionAttributeValues[':status'];
       existing.revokedAt = params.ExpressionAttributeValues[':revokedAt'];
@@ -173,15 +175,18 @@ describe('Integration: agent-revoke handler', () => {
   describe('Full revocation flow', () => {
     it('should handle complete agent revocation flow', async () => {
       // Setup: Store active agent
-      dynamoDBState.agents.set('did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ', {
-        userId: 'test-user-id',
-        did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
-        status: 'active',
-        publicKey: Buffer.from('a'.repeat(32)).toString('base64'),
-        metadata: { name: 'Test Agent' },
-        didHistory: [],
-        registeredAt: new Date().toISOString(),
-      });
+      dynamoDBState.agents.set(
+        'test-user-id:did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
+        {
+          userId: 'test-user-id',
+          did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
+          status: 'active',
+          publicKey: Buffer.from('a'.repeat(32)).toString('base64'),
+          metadata: { name: 'Test Agent' },
+          didHistory: [],
+          registeredAt: new Date().toISOString(),
+        }
+      );
 
       // Setup: Store refresh tokens
       dynamoDBState.refreshTokens.set('refresh-token-1', {
@@ -212,7 +217,7 @@ describe('Integration: agent-revoke handler', () => {
 
       // Verify agent status updated
       const agent = dynamoDBState.agents.get(
-        'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ'
+        'test-user-id:did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ'
       ) as Record<string, unknown>;
       expect(agent.status).toBe('revoked');
       expect(agent.revokedAt).toBeDefined();
@@ -233,16 +238,19 @@ describe('Integration: agent-revoke handler', () => {
 
     it('should fail with already revoked DID', async () => {
       // Setup: Store revoked agent
-      dynamoDBState.agents.set('did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ', {
-        userId: 'test-user-id',
-        did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
-        status: 'revoked',
-        publicKey: Buffer.from('a'.repeat(32)).toString('base64'),
-        metadata: { name: 'Test Agent' },
-        didHistory: [],
-        registeredAt: new Date().toISOString(),
-        revokedAt: new Date().toISOString(),
-      });
+      dynamoDBState.agents.set(
+        'test-user-id:did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
+        {
+          userId: 'test-user-id',
+          did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
+          status: 'revoked',
+          publicKey: Buffer.from('a'.repeat(32)).toString('base64'),
+          metadata: { name: 'Test Agent' },
+          didHistory: [],
+          registeredAt: new Date().toISOString(),
+          revokedAt: new Date().toISOString(),
+        }
+      );
 
       const result = await handler(mockEvent as APIGatewayProxyEvent);
 
@@ -253,15 +261,18 @@ describe('Integration: agent-revoke handler', () => {
 
     it('should fail with unauthorized DID', async () => {
       // Setup: Store active agent
-      dynamoDBState.agents.set('did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ', {
-        userId: 'test-user-id',
-        did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
-        status: 'active',
-        publicKey: Buffer.from('a'.repeat(32)).toString('base64'),
-        metadata: { name: 'Test Agent' },
-        didHistory: [],
-        registeredAt: new Date().toISOString(),
-      });
+      dynamoDBState.agents.set(
+        'test-user-id:did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
+        {
+          userId: 'test-user-id',
+          did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
+          status: 'active',
+          publicKey: Buffer.from('a'.repeat(32)).toString('base64'),
+          metadata: { name: 'Test Agent' },
+          didHistory: [],
+          registeredAt: new Date().toISOString(),
+        }
+      );
 
       // Mock JWT with different DID
       const { verify } = await import('jsonwebtoken');
@@ -286,20 +297,23 @@ describe('Integration: agent-revoke handler', () => {
   describe('Agent state management', () => {
     it('should update agent status correctly', async () => {
       // Setup: Store active agent
-      dynamoDBState.agents.set('did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ', {
-        userId: 'test-user-id',
-        did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
-        status: 'active',
-        publicKey: Buffer.from('a'.repeat(32)).toString('base64'),
-        metadata: { name: 'Test Agent' },
-        didHistory: [],
-        registeredAt: new Date().toISOString(),
-      });
+      dynamoDBState.agents.set(
+        'test-user-id:did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
+        {
+          userId: 'test-user-id',
+          did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
+          status: 'active',
+          publicKey: Buffer.from('a'.repeat(32)).toString('base64'),
+          metadata: { name: 'Test Agent' },
+          didHistory: [],
+          registeredAt: new Date().toISOString(),
+        }
+      );
 
       await handler(mockEvent as APIGatewayProxyEvent);
 
       const agent = dynamoDBState.agents.get(
-        'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ'
+        'test-user-id:did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ'
       ) as Record<string, unknown>;
       expect(agent.status).toBe('revoked');
       expect(agent.revokedAt).toBeDefined();
@@ -308,20 +322,23 @@ describe('Integration: agent-revoke handler', () => {
 
     it('should preserve other agent data', async () => {
       // Setup: Store active agent with metadata
-      dynamoDBState.agents.set('did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ', {
-        userId: 'test-user-id',
-        did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
-        status: 'active',
-        publicKey: Buffer.from('a'.repeat(32)).toString('base64'),
-        metadata: { name: 'Test Agent', version: '1.0' },
-        didHistory: [{ did: 'did:key:original', revokedAt: null, reason: null }],
-        registeredAt: '2024-01-01T00:00:00Z',
-      });
+      dynamoDBState.agents.set(
+        'test-user-id:did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
+        {
+          userId: 'test-user-id',
+          did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
+          status: 'active',
+          publicKey: Buffer.from('a'.repeat(32)).toString('base64'),
+          metadata: { name: 'Test Agent', version: '1.0' },
+          didHistory: [{ did: 'did:key:original', revokedAt: null, reason: null }],
+          registeredAt: '2024-01-01T00:00:00Z',
+        }
+      );
 
       await handler(mockEvent as APIGatewayProxyEvent);
 
       const agent = dynamoDBState.agents.get(
-        'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ'
+        'test-user-id:did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ'
       ) as Record<string, unknown>;
       expect(agent.metadata).toEqual({ name: 'Test Agent', version: '1.0' });
       expect(agent.didHistory).toHaveLength(1);
@@ -332,15 +349,18 @@ describe('Integration: agent-revoke handler', () => {
   describe('Refresh token cleanup', () => {
     it('should delete all refresh tokens for user', async () => {
       // Setup: Store active agent
-      dynamoDBState.agents.set('did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ', {
-        userId: 'test-user-id',
-        did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
-        status: 'active',
-        publicKey: Buffer.from('a'.repeat(32)).toString('base64'),
-        metadata: { name: 'Test Agent' },
-        didHistory: [],
-        registeredAt: new Date().toISOString(),
-      });
+      dynamoDBState.agents.set(
+        'test-user-id:did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
+        {
+          userId: 'test-user-id',
+          did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
+          status: 'active',
+          publicKey: Buffer.from('a'.repeat(32)).toString('base64'),
+          metadata: { name: 'Test Agent' },
+          didHistory: [],
+          registeredAt: new Date().toISOString(),
+        }
+      );
 
       // Setup: Store multiple refresh tokens
       dynamoDBState.refreshTokens.set('token-1', {
@@ -380,15 +400,18 @@ describe('Integration: agent-revoke handler', () => {
 
     it('should handle no refresh tokens gracefully', async () => {
       // Setup: Store active agent
-      dynamoDBState.agents.set('did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ', {
-        userId: 'test-user-id',
-        did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
-        status: 'active',
-        publicKey: Buffer.from('a'.repeat(32)).toString('base64'),
-        metadata: { name: 'Test Agent' },
-        didHistory: [],
-        registeredAt: new Date().toISOString(),
-      });
+      dynamoDBState.agents.set(
+        'test-user-id:did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
+        {
+          userId: 'test-user-id',
+          did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
+          status: 'active',
+          publicKey: Buffer.from('a'.repeat(32)).toString('base64'),
+          metadata: { name: 'Test Agent' },
+          didHistory: [],
+          registeredAt: new Date().toISOString(),
+        }
+      );
 
       // No refresh tokens stored
 

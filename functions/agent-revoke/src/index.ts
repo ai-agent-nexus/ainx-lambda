@@ -121,7 +121,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       const didResult = await dynamodb
         .get({
           TableName: AGENT_REGISTRATION_TABLE_NAME,
-          Key: { did: targetDid },
+          Key: { userId, did: targetDid },
         })
         .promise();
 
@@ -155,7 +155,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       await dynamodb
         .update({
           TableName: AGENT_REGISTRATION_TABLE_NAME,
-          Key: { did: targetDid },
+          Key: { userId, did: targetDid },
           UpdateExpression: 'SET #status = :status, revokedAt = :revokedAt, updatedAt = :updatedAt',
           ExpressionAttributeNames: {
             '#status': 'status',
