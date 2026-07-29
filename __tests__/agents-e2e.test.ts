@@ -670,13 +670,26 @@ describe('E2E: Agent Management', () => {
     });
 
     it('should return 404 for non-existent DID', async () => {
-      const { did, signMessage } = generateValidDid();
+      const { did: registeredDid, signMessage } = generateValidDid();
+      const metadata = { name: 'Test Agent' };
+      const message = JSON.stringify({ did: registeredDid, metadata });
+      const signature = signMessage(message);
 
-      // Get JWT token (but don't register the DID)
-      const jwtToken = await getJwtToken(did, signMessage);
+      await axios.post(
+        REGISTER_URL,
+        { did: registeredDid, signature, metadata },
+        {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 10000,
+        }
+      );
+
+      const jwtToken = await getJwtToken(registeredDid, signMessage);
+
+      const { did: nonExistentDid } = generateValidDid();
 
       try {
-        await axios.delete(`${REVOKE_URL}/${did}`, {
+        await axios.delete(`${REVOKE_URL}/${nonExistentDid}`, {
           headers: {
             Authorization: `Bearer ${jwtToken}`,
           },
