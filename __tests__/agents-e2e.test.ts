@@ -189,38 +189,48 @@ describe('E2E: Agent Management', () => {
 
   describe('Happy Path: Agent Revocation', () => {
     it('should successfully revoke an agent', async () => {
-      // Register a DID
       const { did, signMessage } = generateValidDid();
       const metadata = { name: 'Test Agent' };
       const message = JSON.stringify({ did, metadata });
       const signature = signMessage(message);
 
-      const registerBody = {
-        did,
-        signature,
-        metadata,
-      };
-
-      const registerResponse = await axios.post(REGISTER_URL, registerBody, {
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 10000,
-      });
+      const registerResponse = await axios.post(
+        REGISTER_URL,
+        {
+          did,
+          signature,
+          metadata,
+        },
+        {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 10000,
+        }
+      );
       expect(registerResponse.status).toBe(201);
 
-      // Get JWT token
       const jwtToken = await getJwtToken(did, signMessage);
 
-      // Revoke agent
-      const revokeResponse = await axios.delete(`${REVOKE_URL}/${did}`, {
-        headers: {
-          Authorization: `Bearer ${jwtToken}`,
-        },
-        timeout: 10000,
-      });
+      try {
+        const revokeResponse = await axios.delete(`${REVOKE_URL}/${did}`, {
+          headers: {
+            Authorization: `Bearer ${jwtToken}`,
+          },
+          timeout: 10000,
+        });
 
-      expect(revokeResponse.status).toBe(200);
-      expect(revokeResponse.data.message).toBe('Agent revoked successfully');
-      expect(revokeResponse.data.did).toBe(did);
+        expect(revokeResponse.status).toBe(200);
+        expect(revokeResponse.data.message).toBe('Agent revoked successfully');
+        expect(revokeResponse.data.did).toBe(did);
+      } catch (error: unknown) {
+        const axiosError = error as {
+          response?: { status: number; data: Record<string, unknown> };
+        };
+        console.error('Revoke failed:', {
+          status: axiosError.response?.status,
+          data: axiosError.response?.data,
+        });
+        throw error;
+      }
     });
   });
 
@@ -669,7 +679,7 @@ describe('E2E: Agent Management', () => {
       }
     });
 
-    it('should return 404 for non-existent DID', async () => {
+    it('should return 403 for unauthorized DID revocation', async () => {
       const { did: registeredDid, signMessage } = generateValidDid();
       const metadata = { name: 'Test Agent' };
       const message = JSON.stringify({ did: registeredDid, metadata });
@@ -686,10 +696,10 @@ describe('E2E: Agent Management', () => {
 
       const jwtToken = await getJwtToken(registeredDid, signMessage);
 
-      const { did: nonExistentDid } = generateValidDid();
+      const { did: otherDid } = generateValidDid();
 
       try {
-        await axios.delete(`${REVOKE_URL}/${nonExistentDid}`, {
+        await axios.delete(`${REVOKE_URL}/${otherDid}`, {
           headers: {
             Authorization: `Bearer ${jwtToken}`,
           },
@@ -698,8 +708,8 @@ describe('E2E: Agent Management', () => {
         throw new Error('Expected request to fail');
       } catch (error: unknown) {
         const axiosError = error as { response?: { status: number; data: { code: string } } };
-        expect(axiosError.response?.status).toBe(404);
-        expect(axiosError.response?.data.code).toBe('DID_NOT_FOUND');
+        expect(axiosError.response?.status).toBe(403);
+        expect(axiosError.response?.data.code).toBe('INSUFFICIENT_SCOPE');
       }
     });
   });

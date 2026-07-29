@@ -66,7 +66,11 @@ export const handler = async (
         logger.warn('Invalid token', { error: err.message });
         return generateDenyAllPolicy();
       }
-      throw err;
+      logger.error('JWT verification error', {
+        error: (err as Error).message,
+        name: (err as Error).name,
+      });
+      return generateDenyAllPolicy();
     }
 
     const { jti, did, sub: userId } = decodedToken;

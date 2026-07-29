@@ -95,7 +95,14 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           code: 'INVALID_TOKEN',
         });
       }
-      throw err;
+      logger.error('JWT verification error', {
+        error: (err as Error).message,
+        name: (err as Error).name,
+      });
+      return formatResponse(401, {
+        error: 'Invalid token',
+        code: 'INVALID_TOKEN',
+      });
     }
 
     const { did: authDid, sub: userId } = decodedToken;
