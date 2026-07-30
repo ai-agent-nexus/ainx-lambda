@@ -1,5 +1,6 @@
 import axios from 'axios';
 import crypto from 'crypto';
+import { DynamoDB } from 'aws-sdk';
 
 /**
  * E2E Tests for Connection Management API
@@ -21,6 +22,12 @@ const CONNECTIONS_URL = `${API_BASE_URL}/connections`;
 const REGISTER_URL = `${API_BASE_URL}/agents/register`;
 const CHALLENGE_URL = `${API_BASE_URL}/auth/challenge`;
 const TOKEN_URL = `${API_BASE_URL}/auth/token`;
+
+const dynamodb = new DynamoDB.DocumentClient();
+const INVITATIONS_TABLE_NAME = process.env.INVITATIONS_TABLE_NAME || 'ainx-invitations-sit';
+const CONNECTION_REQUESTS_TABLE_NAME =
+  process.env.CONNECTION_REQUESTS_TABLE_NAME || 'ainx-connection-requests-sit';
+const CONNECTIONS_TABLE_NAME = process.env.CONNECTIONS_TABLE_NAME || 'ainx-connections-sit';
 
 describe('E2E: Connection Management', () => {
   // Generate a valid did:key with proper signature
@@ -114,6 +121,77 @@ describe('E2E: Connection Management', () => {
     await registerAgent(receiver.did, receiver.signMessage);
     senderToken = await getJwtToken(sender.did, sender.signMessage);
     receiverToken = await getJwtToken(receiver.did, receiver.signMessage);
+  });
+
+  const cleanupTestData = async () => {
+    try {
+      const deletePromises: Promise<unknown>[] = [];
+
+      const invitations = await dynamodb
+        .scan({
+          TableName: INVITATIONS_TABLE_NAME,
+          ProjectionExpression: 'invitationCode',
+        })
+        .promise();
+
+      for (const item of invitations.Items || []) {
+        deletePromises.push(
+          dynamodb
+            .delete({
+              TableName: INVITATIONS_TABLE_NAME,
+              Key: { invitationCode: item.invitationCode },
+            })
+            .promise()
+        );
+      }
+
+      const requests = await dynamodb
+        .scan({
+          TableName: CONNECTION_REQUESTS_TABLE_NAME,
+          ProjectionExpression: 'requestId',
+        })
+        .promise();
+
+      for (const item of requests.Items || []) {
+        deletePromises.push(
+          dynamodb
+            .delete({
+              TableName: CONNECTION_REQUESTS_TABLE_NAME,
+              Key: { requestId: item.requestId },
+            })
+            .promise()
+        );
+      }
+
+      const connections = await dynamodb
+        .scan({
+          TableName: CONNECTIONS_TABLE_NAME,
+          ProjectionExpression: 'userId,connectionId',
+        })
+        .promise();
+
+      for (const item of connections.Items || []) {
+        deletePromises.push(
+          dynamodb
+            .delete({
+              TableName: CONNECTIONS_TABLE_NAME,
+              Key: {
+                userId: item.userId,
+                connectionId: item.connectionId,
+              },
+            })
+            .promise()
+        );
+      }
+
+      await Promise.all(deletePromises);
+    } catch (error) {
+      console.warn('Cleanup error:', error);
+    }
+  };
+
+  afterAll(async () => {
+    await cleanupTestData();
   });
 
   describe('Happy Path', () => {
@@ -281,7 +359,7 @@ describe('E2E: Connection Management', () => {
 
       const code = createResponse.data.invitationCode;
 
-      await axios.post(
+      const firstResponse = await axios.post(
         REQUESTS_URL,
         {
           toDid: receiver.did,
@@ -295,6 +373,8 @@ describe('E2E: Connection Management', () => {
           timeout: 10000,
         }
       );
+
+      expect(firstResponse.status).toBe(201);
 
       try {
         await axios.post(
@@ -320,7 +400,9 @@ describe('E2E: Connection Management', () => {
 
     it('should reject non-target user accepting request', async () => {
       const other = generateValidDid();
+      const otherReceiver = generateValidDid();
       await registerAgent(other.did, other.signMessage);
+      await registerAgent(otherReceiver.did, otherReceiver.signMessage);
       const otherToken = await getJwtToken(other.did, other.signMessage);
 
       const createResponse = await axios.post(
@@ -340,7 +422,7 @@ describe('E2E: Connection Management', () => {
       const sendResponse = await axios.post(
         REQUESTS_URL,
         {
-          toDid: receiver.did,
+          toDid: otherReceiver.did,
           invitationCode: code,
         },
         {
