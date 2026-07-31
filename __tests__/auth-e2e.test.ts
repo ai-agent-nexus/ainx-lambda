@@ -55,18 +55,28 @@ describe('E2E: Authentication Flow', () => {
     const message = JSON.stringify({ did, metadata });
     const signature = signMessage(message);
 
-    await axios.post(
-      REGISTER_URL,
-      {
-        did,
-        signature,
-        metadata,
-      },
-      {
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 10000,
+    try {
+      await axios.post(
+        REGISTER_URL,
+        {
+          did,
+          signature,
+          metadata,
+        },
+        {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 10000,
+        }
+      );
+    } catch (error) {
+      if (axios.isAxiosError(error) && error.response) {
+        console.error('registerDid failed:', {
+          status: error.response.status,
+          data: error.response.data,
+        });
       }
-    );
+      throw error;
+    }
   };
 
   const getTokenPair = async (did: string, signMessage: (msg: string) => string) => {

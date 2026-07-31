@@ -795,13 +795,24 @@ describe('E2E: Agent Management', () => {
         metadata,
       };
 
-      const response = await axios.post(REGISTER_URL, requestBody, {
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 10000,
-      });
+      try {
+        const response = await axios.post(REGISTER_URL, requestBody, {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 10000,
+        });
 
-      expect(response.status).toBe(201);
-      expect(response.data.message).toBe('Agent registered successfully');
+        expect(response.status).toBe(201);
+        expect(response.data.message).toBe('Agent registered successfully');
+      } catch (error) {
+        if (axios.isAxiosError(error) && error.response) {
+          console.error('XSS test failed with response:', {
+            status: error.response.status,
+            data: error.response.data,
+            headers: error.response.headers,
+          });
+        }
+        throw error;
+      }
     });
   });
 });
