@@ -5,7 +5,7 @@ module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
   roots: ['<rootDir>'],
-  testMatch: ['**/__tests__/e2e.test.ts'],
+  testMatch: ['**/__tests__/*-e2e.test.ts', '**/__tests__/e2e.test.ts'],
   transform: {
     '^.+\.ts$': 'ts-jest',
   },
@@ -14,6 +14,7 @@ module.exports = {
   testTimeout: 30000,
   maxWorkers: 1,
   moduleNameMapper: {
+    '^@ainx/connection-utils$': path.resolve(__dirname, 'packages/connection-utils/src/index.ts'),
     '^@ainx/logger$': path.resolve(__dirname, 'packages/logger/index.ts'),
     '^@ainx/shared-utils$': path.resolve(__dirname, 'packages/shared-utils/index.ts'),
     '^@ainx/crypto-utils$': path.resolve(__dirname, 'packages/crypto-utils/src/index.ts'),

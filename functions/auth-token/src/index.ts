@@ -1,5 +1,12 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { DynamoDB } from 'aws-sdk';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import {
+  DynamoDBDocumentClient,
+  GetCommand,
+  DeleteCommand,
+  QueryCommand,
+  PutCommand,
+} from '@aws-sdk/lib-dynamodb';
 import jwt from 'jsonwebtoken';
 import { Logger } from '@ainx/logger';
 import { formatResponse, parseBody, validateInput } from '@ainx/shared-utils';
@@ -8,7 +15,8 @@ import { verifySignature } from '@ainx/crypto-utils';
 import { v4 as uuidv4 } from 'uuid';
 
 const logger = new Logger('auth-token');
-const dynamodb = new DynamoDB.DocumentClient();
+const client = new DynamoDBClient({});
+const dynamodb = DynamoDBDocumentClient.from(client);
 
 const AGENT_REGISTRATION_TABLE_NAME = process.env.AGENT_REGISTRATION_TABLE_NAME!;
 const CHALLENGE_TABLE_NAME = process.env.CHALLENGE_TABLE_NAME!;
@@ -119,22 +127,22 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     // Verify challenge exists and is valid
     let challengeValid = false;
     try {
-      const challengeResult = await dynamodb
-        .get({
+      const challengeResult = await dynamodb.send(
+        new GetCommand({
           TableName: CHALLENGE_TABLE_NAME,
           Key: { did },
         })
-        .promise();
+      );
 
       if (challengeResult.Item && challengeResult.Item.challenge === challenge) {
         challengeValid = true;
         // Delete challenge after use (one-time use)
-        await dynamodb
-          .delete({
+        await dynamodb.send(
+          new DeleteCommand({
             TableName: CHALLENGE_TABLE_NAME,
             Key: { did },
           })
-          .promise();
+        );
       }
     } catch (err) {
       logger.error('Error verifying challenge', { error: (err as Error).message, did });
@@ -155,8 +163,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     // Verify DID exists and is active
     let userId: string;
     try {
-      const didResult = await dynamodb
-        .query({
+      const didResult = await dynamodb.send(
+        new QueryCommand({
           TableName: AGENT_REGISTRATION_TABLE_NAME,
           IndexName: 'DidIndex',
           KeyConditionExpression: 'did = :did',
@@ -169,7 +177,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             ':status': 'active',
           },
         })
-        .promise();
+      );
 
       if (!didResult.Items || didResult.Items.length === 0) {
         logger.warn('DID not found', { did });
@@ -223,8 +231,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     // Store refresh token
     try {
-      await dynamodb
-        .put({
+      await dynamodb.send(
+        new PutCommand({
           TableName: REFRESH_TOKEN_TABLE_NAME,
           Item: {
             token: refreshToken,
@@ -236,7 +244,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             isRevoked: false,
           },
         })
-        .promise();
+      );
     } catch (err) {
       logger.error('Error storing refresh token', { error: (err as Error).message });
       return formatResponse(500, {

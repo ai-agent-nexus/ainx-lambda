@@ -1,12 +1,19 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { DynamoDB } from 'aws-sdk';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import {
+  DynamoDBDocumentClient,
+  PutCommand,
+  QueryCommand,
+  TransactWriteCommand,
+} from '@aws-sdk/lib-dynamodb';
 import { Logger } from '@ainx/logger';
 import { formatResponse, parseBody, validateInput } from '@ainx/shared-utils';
 import { parseDidKey } from '@ainx/did-utils';
 import { verifySignature } from '@ainx/crypto-utils';
 
 const logger = new Logger('agent-rotate-key');
-const dynamodb = new DynamoDB.DocumentClient();
+const client = new DynamoDBClient({});
+const dynamodb = DynamoDBDocumentClient.from(client);
 const TABLE_NAME = process.env.AGENT_REGISTRATION_TABLE_NAME!;
 const DID_UNIQUENESS_TABLE_NAME = process.env.DID_UNIQUENESS_TABLE_NAME!;
 const NONCE_TABLE_NAME = process.env.NONCE_TABLE_NAME!;
@@ -68,8 +75,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
 
     try {
-      await dynamodb
-        .put({
+      await dynamodb.send(
+        new PutCommand({
           TableName: NONCE_TABLE_NAME,
           Item: {
             nonce,
@@ -78,7 +85,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           },
           ConditionExpression: 'attribute_not_exists(nonce)',
         })
-        .promise();
+      );
     } catch (err) {
       if ((err as Error).name === 'ConditionalCheckFailedException') {
         logger.warn('Nonce already used', { nonce });
@@ -124,8 +131,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       });
     }
 
-    const oldDidQuery = await dynamodb
-      .query({
+    const oldDidQuery = await dynamodb.send(
+      new QueryCommand({
         TableName: TABLE_NAME,
         IndexName: 'DidIndex',
         KeyConditionExpression: 'did = :did',
@@ -138,7 +145,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           ':status': 'active',
         },
       })
-      .promise();
+    );
 
     if (!oldDidQuery.Items || oldDidQuery.Items.length === 0) {
       logger.warn('Old DID not found or not active', { oldDid });
@@ -162,8 +169,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       });
     }
 
-    const newDidQuery = await dynamodb
-      .query({
+    const newDidQuery = await dynamodb.send(
+      new QueryCommand({
         TableName: TABLE_NAME,
         IndexName: 'DidIndex',
         KeyConditionExpression: 'did = :did',
@@ -171,7 +178,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           ':did': newDid,
         },
       })
-      .promise();
+    );
 
     if (newDidQuery.Items && newDidQuery.Items.length > 0) {
       logger.warn('New DID already exists', { newDid });
@@ -185,8 +192,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const ttl = Math.floor(nowDate.getTime() / 1000) + TTL_DAYS * 24 * 60 * 60;
 
     try {
-      await dynamodb
-        .transactWrite({
+      await dynamodb.send(
+        new TransactWriteCommand({
           TransactItems: [
             {
               Put: {
@@ -238,7 +245,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             },
           ],
         })
-        .promise();
+      );
     } catch (err) {
       if ((err as Error).name === 'TransactionCanceledException') {
         logger.warn('Concurrent modification detected', { oldDid, newDid });

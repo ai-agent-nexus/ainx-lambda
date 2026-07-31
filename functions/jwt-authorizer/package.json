@@ -14,7 +14,6 @@
   },
   "dependencies": {
     "@ainx/logger": "^1.0.0",
-    "aws-sdk": "^2.1693.0",
     "jsonwebtoken": "^9.0.0"
   },
   "devDependencies": {
@@ -22,8 +21,8 @@
     "@types/jest": "^29.5.14",
     "@types/jsonwebtoken": "^9.0.0",
     "esbuild": "^0.25.0",
-    "jest": "^29.7.0",
-    "ts-jest": "^29.3.0",
+    "jest": "^30.4.2",
+    "ts-jest": "^29.4.12",
     "typescript": "^5.8.0"
   }
 }

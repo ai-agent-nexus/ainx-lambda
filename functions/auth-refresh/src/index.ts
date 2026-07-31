@@ -1,12 +1,19 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { DynamoDB } from 'aws-sdk';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import {
+  DynamoDBDocumentClient,
+  GetCommand,
+  QueryCommand,
+  TransactWriteCommand,
+} from '@aws-sdk/lib-dynamodb';
 import jwt from 'jsonwebtoken';
 import { Logger } from '@ainx/logger';
 import { formatResponse, parseBody, validateInput } from '@ainx/shared-utils';
 import { v4 as uuidv4 } from 'uuid';
 
 const logger = new Logger('auth-refresh');
-const dynamodb = new DynamoDB.DocumentClient();
+const client = new DynamoDBClient({});
+const dynamodb = DynamoDBDocumentClient.from(client);
 
 const REFRESH_TOKEN_TABLE_NAME = process.env.REFRESH_TOKEN_TABLE_NAME!;
 const AGENT_REGISTRATION_TABLE_NAME = process.env.AGENT_REGISTRATION_TABLE_NAME!;
@@ -73,12 +80,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     // Verify refresh token exists and is valid
     let refreshTokenData: Record<string, unknown> | undefined;
     try {
-      const tokenResult = await dynamodb
-        .get({
+      const tokenResult = await dynamodb.send(
+        new GetCommand({
           TableName: REFRESH_TOKEN_TABLE_NAME,
           Key: { token: refresh_token },
         })
-        .promise();
+      );
 
       if (!tokenResult.Item) {
         logger.warn('Refresh token not found', {
@@ -127,8 +134,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     // Verify DID is still active
     try {
-      const didResult = await dynamodb
-        .query({
+      const didResult = await dynamodb.send(
+        new QueryCommand({
           TableName: AGENT_REGISTRATION_TABLE_NAME,
           IndexName: 'DidIndex',
           KeyConditionExpression: 'did = :did',
@@ -141,7 +148,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             ':status': 'active',
           },
         })
-        .promise();
+      );
 
       if (!didResult.Items || didResult.Items.length === 0) {
         logger.warn('DID not active', { did });
@@ -193,8 +200,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     // Store new refresh token and delete old one (transaction)
     try {
-      await dynamodb
-        .transactWrite({
+      await dynamodb.send(
+        new TransactWriteCommand({
           TransactItems: [
             {
               Put: {
@@ -218,7 +225,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             },
           ],
         })
-        .promise();
+      );
     } catch (err) {
       logger.error('Error updating refresh token', { error: (err as Error).message });
       return formatResponse(500, {

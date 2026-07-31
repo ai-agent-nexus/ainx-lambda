@@ -11,7 +11,7 @@
     "build": "npm run build --workspaces",
     "test": "jest",
     "test:coverage": "jest --coverage",
-    "test:integration": "jest --testPathPattern=integration",
+    "test:integration": "jest --testPathPatterns=integration",
     "lint": "eslint . --ext .ts,.js",
     "lint:fix": "eslint . --ext .ts,.js --fix",
     "format": "prettier --write \"**/*.{ts,js,json,md}\"",
@@ -22,8 +22,11 @@
     "deploy:agent-registration": "cd functions/agent-registration && npm run build && npm run package && aws lambda update-function-code --function-name agent-registration --zip-file fileb://dist/index.zip"
   },
   "devDependencies": {
+    "@ainx/connection-utils": "*",
     "@ainx/crypto-utils": "*",
     "@ainx/did-utils": "*",
+    "@aws-sdk/client-dynamodb": "^3.1100.0",
+    "@aws-sdk/lib-dynamodb": "^3.1100.0",
     "@types/aws-lambda": "^8.10.149",
     "@types/jest": "^29.5.14",
     "@types/jsonwebtoken": "^9.0.10",
@@ -36,7 +39,7 @@
     "eslint": "^9.25.0",
     "eslint-config-prettier": "^10.1.0",
     "eslint-plugin-prettier": "^5.3.0",
-    "jest": "^29.7.0",
+    "jest": "^30.4.2",
     "prettier": "^3.5.0",
     "ts-jest": "^29.3.0",
     "typescript": "^5.8.0"
@@ -59,6 +62,6 @@
   "license": "MIT",
   "dependencies": {
     "jsonwebtoken": "^9.0.3",
-    "uuid": "^14.0.1"
+    "uuid": "^11.1.0"
   }
 }

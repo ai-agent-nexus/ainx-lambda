@@ -22,10 +22,11 @@ jobs:
       functions: ${{ steps.filter.outputs.functions }}
       packages: ${{ steps.filter.outputs.packages }}
       infra: ${{ steps.filter.outputs.infra }}
+      function-matrix: ${{ steps.build-matrix.outputs.function-matrix }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v4.0.2
         id: filter
         with:
           filters: |
@@ -36,15 +37,22 @@ jobs:
             infra:
               - 'infra/**'
               - '.github/workflows/**'
+          list-files: json
+
+      - name: Build function matrix
+        id: build-matrix
+        run: |
+          changed_files='${{ steps.filter.outputs.functions_files }}'
+          python3 scripts/build-function-matrix.py "$changed_files"
 
   # Lint and format check
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
 
@@ -61,15 +69,23 @@ jobs:
   type-check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Install dependencies
         run: npm install
+
+      - name: Build workspace packages
+        run: |
+          cd packages/connection-utils && npm run build
+          cd ../crypto-utils && npm run build
+          cd ../did-utils && npm run build
+          cd ../logger && npm run build
+          cd ../shared-utils && npm run build
 
       - name: Run TypeScript compiler
         run: npx tsc --noEmit
@@ -79,21 +95,29 @@ jobs:
     needs: detect-changes
     if: ${{ needs.detect-changes.outputs.packages == 'true' || needs.detect-changes.outputs.functions == 'true' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Install dependencies
         run: npm install
 
+      - name: Build workspace packages
+        run: |
+          cd packages/connection-utils && npm run build
+          cd ../crypto-utils && npm run build
+          cd ../did-utils && npm run build
+          cd ../logger && npm run build
+          cd ../shared-utils && npm run build
+
       - name: Run tests with coverage
         run: npm run test:coverage
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         with:
           files: ./coverage/lcov.info
           fail_ci_if_error: false
@@ -101,18 +125,26 @@ jobs:
   # Integration tests
   integration-test:
     runs-on: ubuntu-latest
-    needs: detect-changes
-    if: ${{ needs.detect-changes.outputs.functions == 'true' }}
+    needs: [detect-changes, lint, type-check]
+    if: ${{ github.event_name == 'pull_request' && (needs.detect-changes.outputs.packages == 'true' || needs.detect-changes.outputs.functions == 'true') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Install dependencies
         run: npm install
+
+      - name: Build workspace packages
+        run: |
+          cd packages/connection-utils && npm run build
+          cd ../crypto-utils && npm run build
+          cd ../did-utils && npm run build
+          cd ../logger && npm run build
+          cd ../shared-utils && npm run build
 
       - name: Run integration tests
         run: npm run test:integration
@@ -121,7 +153,7 @@ jobs:
   security:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Run npm audit
         run: npm audit --audit-level=moderate
@@ -130,21 +162,29 @@ jobs:
   # Build affected functions
   build:
     runs-on: ubuntu-latest
-    needs: [detect-changes, lint, unit-test]
-    if: ${{ needs.detect-changes.outputs.functions == 'true' }}
+    needs: [detect-changes, lint, type-check, unit-test, integration-test]
+    if: ${{ needs.detect-changes.outputs.functions == 'true' && needs.detect-changes.outputs.function-matrix != '[]' }}
     strategy:
       matrix:
-        function: [agent-registration, agent-rotate-key, auth-challenge, auth-token, auth-refresh, auth-revoke, jwt-authorizer, agent-revoke]
+        function: ${{ fromJson(needs.detect-changes.outputs.function-matrix) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Install dependencies
         run: npm install
+
+      - name: Build workspace packages
+        run: |
+          cd packages/connection-utils && npm run build
+          cd ../crypto-utils && npm run build
+          cd ../did-utils && npm run build
+          cd ../logger && npm run build
+          cd ../shared-utils && npm run build
 
       - name: Build ${{ matrix.function }}
         run: |
@@ -154,31 +194,31 @@ jobs:
           zip -r index.zip index.js
 
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.function }}-build
           path: functions/${{ matrix.function }}/dist/
 
   deploy-sit:
     runs-on: ubuntu-latest
-    needs: [build]
-    if: github.event_name == 'pull_request'
+    needs: [build, detect-changes]
+    if: github.event_name == 'pull_request' && needs.detect-changes.outputs.function-matrix != '[]'
     environment: sit
     strategy:
       matrix:
-        function: [agent-registration, agent-rotate-key, auth-challenge, auth-token, auth-refresh, auth-revoke, jwt-authorizer, agent-revoke]
+        function: ${{ fromJson(needs.detect-changes.outputs.function-matrix) }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Download ${{ matrix.function }} build artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: ${{ matrix.function }}-build
           path: functions/${{ matrix.function }}/dist/
@@ -195,10 +235,10 @@ jobs:
     if: github.event_name == 'pull_request'
     environment: sit
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -223,15 +263,15 @@ jobs:
     if: github.event_name == 'pull_request'
     environment: sit
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@v6
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -270,17 +310,17 @@ jobs:
   #     matrix:
   #       function: [agent-registration]
   #   steps:
-  #     - uses: actions/checkout@v4
+  #     - uses: actions/checkout@v6
   #
   #     - name: Configure AWS credentials
-  #       uses: aws-actions/configure-aws-credentials@v4
+  #       uses: aws-actions/configure-aws-credentials@v6
   #       with:
   #         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
   #         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
   #         aws-region: ${{ env.AWS_REGION }}
   #
   #     - name: Download build artifacts
-  #       uses: actions/download-artifact@v4
+  #       uses: actions/download-artifact@v7
   #       with:
   #         name: ${{ matrix.function }}-build
   #         path: functions/${{ matrix.function }}/dist/
@@ -300,17 +340,17 @@ jobs:
   #     matrix:
   #       function: [agent-registration]
   #   steps:
-  #     - uses: actions/checkout@v4
+  #     - uses: actions/checkout@v6
   #
   #     - name: Configure AWS credentials
-  #       uses: aws-actions/configure-aws-credentials@v4
+  #       uses: aws-actions/configure-aws-credentials@v6
   #       with:
   #         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
   #         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
   #         aws-region: ${{ env.AWS_REGION }}
   #
   #     - name: Download build artifacts
-  #       uses: actions/download-artifact@v4
+  #       uses: actions/download-artifact@v7
   #       with:
   #         name: ${{ matrix.function }}-build
   #         path: functions/${{ matrix.function }}/dist/

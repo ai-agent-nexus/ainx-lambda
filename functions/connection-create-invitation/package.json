@@ -1,0 +1,29 @@
+{
+  "name": "@ainx/create-invitation",
+  "version": "1.0.0",
+  "description": "Create invitation Lambda function",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node24 --outfile=dist/index.js",
+    "build:watch": "esbuild src/index.ts --bundle --platform=node --target=node24 --outfile=dist/index.js --watch",
+    "test": "jest --config ../../jest.config.js",
+    "test:watch": "jest --watch --config ../../jest.config.js",
+    "test:coverage": "jest --coverage --config ../../jest.config.js",
+    "test:integration": "jest --config ../../jest.config.js --testPathPattern=integration",
+    "test:e2e": "jest --config ../../jest.config.js --testPathPattern=e2e",
+    "package": "npm run build && cd dist && zip -r index.zip index.js"
+  },
+  "dependencies": {
+    "@ainx/connection-utils": "^1.0.0",
+    "@ainx/logger": "^1.0.0",
+    "@ainx/shared-utils": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.149",
+    "@types/jest": "^29.5.14",
+    "esbuild": "^0.25.0",
+    "jest": "^30.4.2",
+    "ts-jest": "^29.4.12",
+    "typescript": "^5.8.0"
+  }
+}
