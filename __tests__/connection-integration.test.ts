@@ -107,8 +107,151 @@ const agentRegistrationState = new Map<string, { did: string; status: string }>(
 
 const getConnectionKey = (userId: string, connectionId: string) => `${userId}#${connectionId}`;
 
-// Mock the DynamoDB client - use a single mockSend that can be controlled
-const mockSend = jest.fn();
+const deleteCommands = new WeakSet<object>();
+
+function markAsDelete(command: unknown): void {
+  if (typeof command === 'object' && command !== null) {
+    deleteCommands.add(command);
+  }
+}
+
+const mockSend = jest.fn((command: unknown) => {
+  const cmd = command as {
+    TableName: string;
+    Key?: Record<string, unknown>;
+    Item?: Record<string, unknown>;
+    ExpressionAttributeValues?: Record<string, unknown>;
+    ExpressionAttributeNames?: Record<string, string>;
+    ConditionExpression?: string;
+    UpdateExpression?: string;
+    Select?: string;
+    TransactItems?: Array<{
+      Put?: { TableName: string; Item: Record<string, unknown> };
+      Update?: {
+        TableName: string;
+        Key: Record<string, unknown>;
+        UpdateExpression: string;
+        ExpressionAttributeNames: Record<string, string>;
+        ExpressionAttributeValues: Record<string, unknown>;
+      };
+    }>;
+  };
+
+  const isDelete = typeof command === 'object' && command !== null && deleteCommands.has(command);
+
+  if (cmd.TransactItems) {
+    for (const item of cmd.TransactItems) {
+      if (item.Put && item.Put.TableName.includes('connection')) {
+        const key = getConnectionKey(
+          item.Put.Item.userId as string,
+          item.Put.Item.connectionId as string
+        );
+        connectionsState.set(key, item.Put.Item as unknown as ConnectionItem);
+      }
+      if (item.Update && item.Update.TableName.includes('connection')) {
+        const key = getConnectionKey(
+          item.Update.Key.userId as string,
+          item.Update.Key.connectionId as string
+        );
+        const existing = connectionsState.get(key);
+        if (existing) {
+          const values = item.Update.ExpressionAttributeValues || {};
+          if (values[':status']) existing.status = values[':status'] as string;
+          if (values[':updatedAt']) existing.updatedAt = values[':updatedAt'] as string;
+        }
+      }
+    }
+    return Promise.resolve({});
+  }
+
+  if (cmd.TableName.includes('invitation')) {
+    if (cmd.Item) {
+      invitationsState.set(
+        cmd.Item.invitationCode as string,
+        cmd.Item as unknown as InvitationItem
+      );
+      return Promise.resolve({});
+    }
+    if (cmd.Key) {
+      const code = cmd.Key.invitationCode as string;
+      const item = invitationsState.get(code);
+      return Promise.resolve({ Item: item });
+    }
+  }
+
+  if (cmd.TableName.includes('connection-request')) {
+    if (cmd.Item) {
+      requestsState.set(cmd.Item.requestId as string, cmd.Item as unknown as RequestItem);
+      return Promise.resolve({});
+    }
+    if (cmd.Key) {
+      const requestId = cmd.Key.requestId as string;
+      const item = requestsState.get(requestId);
+      if (isDelete) {
+        requestsState.delete(requestId);
+      }
+      return Promise.resolve({ Item: item });
+    }
+    if (cmd.ExpressionAttributeValues?.[':toDid']) {
+      const toDid = cmd.ExpressionAttributeValues[':toDid'] as string;
+      const fromDid = cmd.ExpressionAttributeValues[':fromDid'] as string;
+      const items: RequestItem[] = [];
+      for (const [, item] of requestsState) {
+        if (item.toDid === toDid && item.fromDid === fromDid && item.status === 'PENDING') {
+          items.push(item);
+        }
+      }
+      return Promise.resolve({ Items: items, Count: items.length });
+    }
+  }
+
+  if (cmd.TableName.includes('connection')) {
+    if (cmd.Item) {
+      const key = getConnectionKey(cmd.Item.userId as string, cmd.Item.connectionId as string);
+      connectionsState.set(key, cmd.Item as unknown as ConnectionItem);
+      return Promise.resolve({});
+    }
+    if (cmd.Key) {
+      const key = getConnectionKey(cmd.Key.userId as string, cmd.Key.connectionId as string);
+      const item = connectionsState.get(key);
+      if (isDelete) {
+        connectionsState.delete(key);
+      }
+      return Promise.resolve({ Item: item });
+    }
+    if (cmd.ExpressionAttributeValues?.[':userId']) {
+      const userId = cmd.ExpressionAttributeValues[':userId'] as string;
+      const items: ConnectionItem[] = [];
+      for (const [, item] of connectionsState) {
+        if (item.userId === userId) {
+          if (cmd.ExpressionAttributeValues?.[':status']) {
+            if (item.status === cmd.ExpressionAttributeValues[':status']) {
+              items.push(item);
+            }
+          } else {
+            items.push(item);
+          }
+        }
+      }
+      return Promise.resolve({ Items: items, Count: items.length });
+    }
+  }
+
+  if (cmd.TableName.includes('agent-registration')) {
+    if (cmd.ExpressionAttributeValues?.[':did']) {
+      const did = cmd.ExpressionAttributeValues[':did'] as string;
+      const items: Array<Record<string, unknown>> = [];
+      const agent = agentRegistrationState.get(did);
+      if (agent && (agent.status === 'active' || agent.status === 'ACTIVE')) {
+        items.push(agent as unknown as Record<string, unknown>);
+      }
+      return Promise.resolve({ Items: items });
+    }
+  }
+
+  return Promise.resolve({});
+});
+
 jest.mock('@aws-sdk/client-dynamodb', () => ({
   DynamoDBClient: jest.fn(() => ({})),
 }));
@@ -116,14 +259,18 @@ jest.mock('@aws-sdk/client-dynamodb', () => ({
 jest.mock('@aws-sdk/lib-dynamodb', () => ({
   DynamoDBDocumentClient: {
     from: jest.fn(() => ({
-      send: (...args: unknown[]) => mockSend(...args),
+      send: (command: unknown) => mockSend(command),
     })),
   },
   GetCommand: jest.fn((params) => params),
   QueryCommand: jest.fn((params) => params),
   PutCommand: jest.fn((params) => params),
   UpdateCommand: jest.fn((params) => params),
-  DeleteCommand: jest.fn((params) => params),
+  DeleteCommand: jest.fn((params) => {
+    const cmd = { ...params };
+    markAsDelete(cmd);
+    return cmd;
+  }),
   TransactWriteCommand: jest.fn((params) => params),
 }));
 

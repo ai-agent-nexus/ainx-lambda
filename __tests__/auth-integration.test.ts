@@ -87,8 +87,123 @@ const dynamoDBState = {
   tokenBlacklist: new Map<string, unknown>(),
 };
 
-// Mock the DynamoDB client - use a single mockSend that can be controlled
-const mockSend = jest.fn();
+const deleteCommands = new WeakSet<object>();
+
+function markAsDelete(command: unknown): void {
+  if (typeof command === 'object' && command !== null) {
+    deleteCommands.add(command);
+  }
+}
+
+const mockSend = jest.fn((command: unknown) => {
+  const cmd = command as {
+    TableName: string;
+    Key?: Record<string, unknown>;
+    Item?: Record<string, unknown>;
+    ExpressionAttributeValues?: Record<string, unknown>;
+    ConditionExpression?: string;
+    TransactItems?: Array<{
+      Put?: { TableName: string; Item: Record<string, unknown> };
+      Delete?: { TableName: string; Key: Record<string, unknown> };
+    }>;
+  };
+
+  const isDelete = typeof command === 'object' && command !== null && deleteCommands.has(command);
+
+  if (cmd.TransactItems) {
+    for (const item of cmd.TransactItems) {
+      if (item.Delete && item.Delete.TableName.includes('refresh-token')) {
+        const token = item.Delete.Key.token as string;
+        dynamoDBState.refreshTokens.delete(token);
+      }
+      if (item.Put && item.Put.TableName.includes('refresh-token')) {
+        dynamoDBState.refreshTokens.set(item.Put.Item.token as string, item.Put.Item);
+      }
+    }
+    return Promise.resolve({});
+  }
+
+  if (cmd.TableName.includes('challenge')) {
+    if (cmd.Item) {
+      if (cmd.ConditionExpression?.includes('attribute_not_exists')) {
+        if (dynamoDBState.challenges.has(cmd.Item.did as string)) {
+          const error = new Error('ConditionalCheckFailedException');
+          error.name = 'ConditionalCheckFailedException';
+          return Promise.reject(error);
+        }
+      }
+      dynamoDBState.challenges.set(cmd.Item.did as string, cmd.Item);
+      return Promise.resolve({});
+    }
+    if (cmd.Key) {
+      const did = cmd.Key.did as string;
+      const item = dynamoDBState.challenges.get(did);
+      if (isDelete) {
+        dynamoDBState.challenges.delete(did);
+      }
+      return Promise.resolve({ Item: item });
+    }
+  }
+
+  if (cmd.TableName.includes('agent-registration')) {
+    if (cmd.ExpressionAttributeValues?.[':did']) {
+      const did = cmd.ExpressionAttributeValues[':did'] as string;
+      const items: Array<Record<string, unknown>> = [];
+      for (const [, item] of dynamoDBState.agents) {
+        const agentItem = item as Record<string, unknown>;
+        if (agentItem.did === did && agentItem.status === 'active') {
+          items.push(agentItem);
+        }
+      }
+      return Promise.resolve({ Items: items });
+    }
+    if (cmd.Key) {
+      const did = cmd.Key.did as string;
+      const item = dynamoDBState.agents.get(did);
+      return Promise.resolve({ Item: item });
+    }
+    if (cmd.Item) {
+      dynamoDBState.agents.set(cmd.Item.did as string, cmd.Item);
+      return Promise.resolve({});
+    }
+  }
+
+  if (cmd.TableName.includes('refresh-token')) {
+    if (cmd.Key) {
+      const token = cmd.Key.token as string;
+      const item = dynamoDBState.refreshTokens.get(token);
+      if (isDelete) {
+        dynamoDBState.refreshTokens.delete(token);
+      }
+      return Promise.resolve({ Item: item });
+    }
+    if (cmd.Item) {
+      dynamoDBState.refreshTokens.set(cmd.Item.token as string, cmd.Item);
+      return Promise.resolve({});
+    }
+    if (cmd.ExpressionAttributeValues?.[':userId']) {
+      const userId = cmd.ExpressionAttributeValues[':userId'] as string;
+      const tokens: Array<Record<string, unknown>> = [];
+      for (const [, item] of dynamoDBState.refreshTokens) {
+        const tokenItem = item as Record<string, unknown>;
+        if (tokenItem.userId === userId) {
+          tokens.push(tokenItem);
+        }
+      }
+      return Promise.resolve({ Items: tokens });
+    }
+  }
+
+  if (cmd.TableName.includes('token-blacklist')) {
+    if (cmd.Item) {
+      dynamoDBState.tokenBlacklist.set(cmd.Item.jti as string, cmd.Item);
+      return Promise.resolve({});
+    }
+  }
+
+  return Promise.resolve({});
+});
+
 jest.mock('@aws-sdk/client-dynamodb', () => ({
   DynamoDBClient: jest.fn(() => ({})),
 }));
@@ -96,14 +211,18 @@ jest.mock('@aws-sdk/client-dynamodb', () => ({
 jest.mock('@aws-sdk/lib-dynamodb', () => ({
   DynamoDBDocumentClient: {
     from: jest.fn(() => ({
-      send: (...args: unknown[]) => mockSend(...args),
+      send: (command: unknown) => mockSend(command),
     })),
   },
   GetCommand: jest.fn((params) => params),
   QueryCommand: jest.fn((params) => params),
   PutCommand: jest.fn((params) => params),
   UpdateCommand: jest.fn((params) => params),
-  DeleteCommand: jest.fn((params) => params),
+  DeleteCommand: jest.fn((params) => {
+    const cmd = { ...params };
+    markAsDelete(cmd);
+    return cmd;
+  }),
   TransactWriteCommand: jest.fn((params) => params),
 }));
 
