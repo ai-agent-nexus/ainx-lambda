@@ -140,7 +140,14 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         })
       );
     } catch (err) {
-      if ((err as Error).name === 'TransactionCanceledException') {
+      const errorName = (err as Error).name;
+      const errorMessage = (err as Error).message;
+      logger.error('DynamoDB transaction failed', {
+        errorName,
+        errorMessage,
+        did,
+      });
+      if (errorName === 'TransactionCanceledException') {
         logger.warn('Duplicate DID registration attempt', { did });
         return formatResponse(409, {
           error: 'DID already registered',
