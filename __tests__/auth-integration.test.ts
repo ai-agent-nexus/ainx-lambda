@@ -161,22 +161,24 @@ const mockTransactWriteFn = jest.fn(() => ({
   promise: jest.fn().mockResolvedValue({}),
 }));
 
-jest.mock('aws-sdk', () => ({
-  DynamoDB: {
-    DocumentClient: jest.fn(() => ({
-      put: (_params: unknown) =>
-        mockPutFn(_params as { TableName: string; Item: Record<string, unknown> }),
-      get: (_params: unknown) =>
-        mockGetFn(_params as { TableName: string; Key: Record<string, unknown> }),
-      query: (_params: unknown) =>
-        mockQueryFn(
-          _params as { TableName: string; ExpressionAttributeValues: Record<string, unknown> }
-        ),
-      delete: (_params: unknown) =>
-        mockDeleteFn(_params as { TableName: string; Key: Record<string, unknown> }),
-      transactWrite: () => mockTransactWriteFn(),
+// Mock the DynamoDB client - use a single mockSend that can be controlled
+const mockSend = jest.fn();
+jest.mock('@aws-sdk/client-dynamodb', () => ({
+  DynamoDBClient: jest.fn(() => ({})),
+}));
+
+jest.mock('@aws-sdk/lib-dynamodb', () => ({
+  DynamoDBDocumentClient: {
+    from: jest.fn(() => ({
+      send: (...args: unknown[]) => mockSend(...args),
     })),
   },
+  GetCommand: jest.fn((params) => params),
+  QueryCommand: jest.fn((params) => params),
+  PutCommand: jest.fn((params) => params),
+  UpdateCommand: jest.fn((params) => params),
+  DeleteCommand: jest.fn((params) => params),
+  TransactWriteCommand: jest.fn((params) => params),
 }));
 
 jest.mock('jsonwebtoken', () => ({

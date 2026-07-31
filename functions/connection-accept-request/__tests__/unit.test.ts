@@ -33,26 +33,24 @@ jest.mock('@ainx/connection-utils', () => ({
   },
 }));
 
-const mockGetFn = jest.fn(() => ({
-  promise: jest.fn().mockResolvedValue({}),
+// Mock the DynamoDB client - use a single mockSend that can be controlled
+const mockSend = jest.fn();
+jest.mock('@aws-sdk/client-dynamodb', () => ({
+  DynamoDBClient: jest.fn(() => ({})),
 }));
 
-const mockQueryFn = jest.fn(() => ({
-  promise: jest.fn().mockResolvedValue({ Items: [], Count: 0 }),
-}));
-
-const mockTransactWriteFn = jest.fn(() => ({
-  promise: jest.fn().mockResolvedValue({}),
-}));
-
-jest.mock('aws-sdk', () => ({
-  DynamoDB: {
-    DocumentClient: jest.fn(() => ({
-      get: (...args: unknown[]) => (mockGetFn as jest.Mock)(...args),
-      query: (...args: unknown[]) => (mockQueryFn as jest.Mock)(...args),
-      transactWrite: (...args: unknown[]) => (mockTransactWriteFn as jest.Mock)(...args),
+jest.mock('@aws-sdk/lib-dynamodb', () => ({
+  DynamoDBDocumentClient: {
+    from: jest.fn(() => ({
+      send: (...args: unknown[]) => mockSend(...args),
     })),
   },
+  GetCommand: jest.fn((params) => params),
+  QueryCommand: jest.fn((params) => params),
+  PutCommand: jest.fn((params) => params),
+  UpdateCommand: jest.fn((params) => params),
+  DeleteCommand: jest.fn((params) => params),
+  TransactWriteCommand: jest.fn((params) => params),
 }));
 
 describe('accept-request handler', () => {
@@ -78,20 +76,14 @@ describe('accept-request handler', () => {
 
   describe('Routing', () => {
     it('should handle POST /connections/requests/{id}/accept', async () => {
-      mockGetFn.mockImplementation(() => ({
-        promise: jest.fn().mockResolvedValue({
-          Item: {
+      mockSend.mockResolvedValueOnce({ Item: {
             requestId: 'req_test123',
             fromDid: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ_sender',
             toDid: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
             status: 'PENDING',
-          },
-        }),
-      }));
+          } });
 
-      mockQueryFn.mockImplementation(() => ({
-        promise: jest.fn().mockResolvedValue({ Count: 0 }),
-      }));
+      mockSend.mockResolvedValueOnce({ Count: 0 });
 
       const result = await handler(mockEvent as APIGatewayProxyEvent);
 
@@ -113,9 +105,7 @@ describe('accept-request handler', () => {
 
   describe('Request validation', () => {
     it('should return 404 for non-existent request', async () => {
-      mockGetFn.mockImplementation(() => ({
-        promise: jest.fn().mockResolvedValue({}),
-      }));
+      mockSend.mockResolvedValueOnce({});
 
       const result = await handler(mockEvent as APIGatewayProxyEvent);
 
@@ -125,16 +115,12 @@ describe('accept-request handler', () => {
     });
 
     it('should return 403 for non-target user', async () => {
-      mockGetFn.mockImplementation(() => ({
-        promise: jest.fn().mockResolvedValue({
-          Item: {
+      mockSend.mockResolvedValueOnce({ Item: {
             requestId: 'req_test123',
             fromDid: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ_sender',
             toDid: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ_other',
             status: 'PENDING',
-          },
-        }),
-      }));
+          } });
 
       const result = await handler(mockEvent as APIGatewayProxyEvent);
 
@@ -144,16 +130,12 @@ describe('accept-request handler', () => {
     });
 
     it('should return 409 for non-pending request', async () => {
-      mockGetFn.mockImplementation(() => ({
-        promise: jest.fn().mockResolvedValue({
-          Item: {
+      mockSend.mockResolvedValueOnce({ Item: {
             requestId: 'req_test123',
             fromDid: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ_sender',
             toDid: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
             status: 'ACCEPTED',
-          },
-        }),
-      }));
+          } });
 
       const result = await handler(mockEvent as APIGatewayProxyEvent);
 
@@ -165,20 +147,14 @@ describe('accept-request handler', () => {
 
   describe('Connection limit', () => {
     it('should return 429 when connection limit reached', async () => {
-      mockGetFn.mockImplementation(() => ({
-        promise: jest.fn().mockResolvedValue({
-          Item: {
+      mockSend.mockResolvedValueOnce({ Item: {
             requestId: 'req_test123',
             fromDid: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ_sender',
             toDid: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
             status: 'PENDING',
-          },
-        }),
-      }));
+          } });
 
-      mockQueryFn.mockImplementation(() => ({
-        promise: jest.fn().mockResolvedValue({ Count: 100 }),
-      }));
+      mockSend.mockResolvedValueOnce({ Count: 100 });
 
       const result = await handler(mockEvent as APIGatewayProxyEvent);
 
@@ -190,9 +166,7 @@ describe('accept-request handler', () => {
 
   describe('Error handling', () => {
     it('should return 500 for unexpected errors', async () => {
-      mockGetFn.mockImplementation(() => ({
-        promise: jest.fn().mockRejectedValue(new Error('DB Error')),
-      }));
+      mockSend.mockRejectedValueOnce(new Error('DB Error'));
 
       const result = await handler(mockEvent as APIGatewayProxyEvent);
 

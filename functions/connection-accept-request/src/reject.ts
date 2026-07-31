@@ -1,6 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
 import { Logger } from '@ainx/logger';
 import { formatResponse } from '@ainx/shared-utils';
 import { ConnectionRequestStatus } from '@ainx/connection-utils';
@@ -40,10 +40,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       });
     }
 
-    const requestResult = await dynamodb.get({
+    const requestResult = await dynamodb.send(new GetCommand({
       TableName: CONNECTION_REQUESTS_TABLE_NAME,
       Key: { requestId },
-    });
+    }));
 
     if (!requestResult.Item) {
       logger.warn('Request not found', { requestId });
@@ -73,7 +73,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     const now = new Date().toISOString();
 
-    await dynamodb.update({
+    await dynamodb.send(new UpdateCommand({
       TableName: CONNECTION_REQUESTS_TABLE_NAME,
       Key: { requestId },
       UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
@@ -84,7 +84,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         ':status': ConnectionRequestStatus.REJECTED,
         ':updatedAt': now,
       },
-    });
+    }));
 
     logger.info('Connection request rejected', { requestId, fromDid: request.fromDid, toDid });
 

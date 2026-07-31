@@ -1,6 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { Logger } from '@ainx/logger';
 import { formatResponse, parseBody } from '@ainx/shared-utils';
 import {
@@ -75,7 +75,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const invitationCode = generateInvitationCode();
     const { expiresAt, ttl } = calculateInvitationExpiration(expiresInSeconds);
 
-    await dynamodb.put({
+    await dynamodb.send(new PutCommand({
       TableName: INVITATIONS_TABLE_NAME,
       Item: {
         invitationCode,
@@ -84,7 +84,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         createdAt: new Date().toISOString(),
         ttl,
       },
-    });
+    }));
 
     logger.info('Invitation created successfully', { invitationCode, creatorDid, expiresAt });
 

@@ -107,146 +107,24 @@ const agentRegistrationState = new Map<string, { did: string; status: string }>(
 
 const getConnectionKey = (userId: string, connectionId: string) => `${userId}#${connectionId}`;
 
-jest.mock('aws-sdk', () => ({
-  DynamoDB: {
-    DocumentClient: jest.fn(() => ({
-      put: jest.fn((params: { TableName: string; Item: Record<string, unknown> }) => ({
-        promise: jest.fn().mockImplementation(() => {
-          const { TableName, Item } = params;
-          if (TableName.includes('connections') && !TableName.includes('requests')) {
-            const item = Item as unknown as ConnectionItem;
-            connectionsState.set(getConnectionKey(item.userId, item.connectionId), item);
-          } else if (TableName.includes('connection-requests')) {
-            const item = Item as unknown as RequestItem;
-            requestsState.set(item.requestId, item);
-          } else if (TableName.includes('invitations')) {
-            const item = Item as unknown as InvitationItem;
-            invitationsState.set(item.invitationCode, item);
-          }
-          return Promise.resolve({});
-        }),
-      })),
-      get: jest.fn((params: { TableName: string; Key: Record<string, unknown> }) => ({
-        promise: jest.fn().mockImplementation(() => {
-          const { TableName, Key } = params;
-          if (TableName.includes('connections') && !TableName.includes('requests')) {
-            const key = getConnectionKey(Key.userId as string, Key.connectionId as string);
-            const item = connectionsState.get(key);
-            return Promise.resolve({ Item: item });
-          } else if (TableName.includes('connection-requests')) {
-            const item = requestsState.get(Key.requestId as string);
-            return Promise.resolve({ Item: item });
-          } else if (TableName.includes('invitations')) {
-            const item = invitationsState.get(Key.invitationCode as string);
-            return Promise.resolve({ Item: item });
-          } else if (TableName.includes('agent-registration')) {
-            const item = agentRegistrationState.get(Key.did as string);
-            return Promise.resolve({ Item: item });
-          }
-          return Promise.resolve({});
-        }),
-      })),
-      query: jest.fn(
-        (params: {
-          TableName: string;
-          KeyConditionExpression?: string;
-          ExpressionAttributeValues?: Record<string, unknown>;
-        }) => ({
-          promise: jest.fn().mockImplementation(() => {
-            const { TableName, ExpressionAttributeValues } = params;
-            if (TableName.includes('connections') && !TableName.includes('requests')) {
-              const userId = ExpressionAttributeValues?.[':userId'] as string;
-              const statusFilter = ExpressionAttributeValues?.[':status'] as string;
-              let items = Array.from(connectionsState.values()).filter(
-                (item) => item.userId === userId
-              );
-              if (statusFilter) {
-                items = items.filter((item) => item.status === statusFilter);
-              }
-              return Promise.resolve({ Items: items, Count: items.length });
-            } else if (TableName.includes('connection-requests')) {
-              const toDid = ExpressionAttributeValues?.[':toDid'] as string;
-              const items = Array.from(requestsState.values()).filter(
-                (item) => item.toDid === toDid && item.status === 'PENDING'
-              );
-              return Promise.resolve({ Items: items, Count: items.length });
-            } else if (TableName.includes('agent-registration')) {
-              const did = ExpressionAttributeValues?.[':did'] as string;
-              const items = Array.from(agentRegistrationState.values()).filter(
-                (item) => item.did === did
-              );
-              return Promise.resolve({ Items: items, Count: items.length });
-            }
-            return Promise.resolve({ Items: [], Count: 0 });
-          }),
-        })
-      ),
-      update: jest.fn(
-        (params: {
-          TableName: string;
-          Key: Record<string, unknown>;
-          UpdateExpression: string;
-          ExpressionAttributeValues: Record<string, unknown>;
-        }) => ({
-          promise: jest.fn().mockImplementation(() => {
-            const { TableName, Key, ExpressionAttributeValues } = params;
-            if (TableName.includes('connection-requests')) {
-              const item = requestsState.get(Key.requestId as string);
-              if (item) {
-                item.status = ExpressionAttributeValues[':status'] as string;
-                item.updatedAt = ExpressionAttributeValues[':updatedAt'] as string;
-              }
-            }
-            return Promise.resolve({});
-          }),
-        })
-      ),
-      transactWrite: jest.fn((params: { TransactItems: Array<Record<string, unknown>> }) => ({
-        promise: jest.fn().mockImplementation(() => {
-          const { TransactItems } = params;
-          for (const item of TransactItems) {
-            if (item.Put) {
-              const putItem = item.Put as { TableName: string; Item: Record<string, unknown> };
-              const tableName = putItem.TableName;
-              const itemData = putItem.Item;
-              if (tableName.includes('connections')) {
-                const conn = itemData as unknown as ConnectionItem;
-                connectionsState.set(getConnectionKey(conn.userId, conn.connectionId), conn);
-              } else if (tableName.includes('connection-requests')) {
-                const req = itemData as unknown as RequestItem;
-                requestsState.set(req.requestId, req);
-              }
-            }
-            if (item.Update) {
-              const updateItem = item.Update as {
-                TableName: string;
-                Key: Record<string, unknown>;
-                ExpressionAttributeValues: Record<string, unknown>;
-              };
-              const tableName = updateItem.TableName;
-              const key = updateItem.Key;
-              const values = updateItem.ExpressionAttributeValues;
-              if (tableName.includes('connections')) {
-                const connKey = getConnectionKey(key.userId as string, key.connectionId as string);
-                const conn = connectionsState.get(connKey);
-                if (conn) {
-                  conn.status = values[':status'] as string;
-                  conn.updatedAt = values[':updatedAt'] as string;
-                }
-              } else if (tableName.includes('connection-requests')) {
-                const req = requestsState.get(key.requestId as string);
-                if (req) {
-                  req.status = values[':status'] as string;
-                  req.updatedAt = values[':updatedAt'] as string;
-                }
-              }
-            }
-          }
-          return Promise.resolve({});
-        }),
-      })),
+// Mock the DynamoDB client - use a single mockSend that can be controlled
+const mockSend = jest.fn();
+jest.mock('@aws-sdk/client-dynamodb', () => ({
+  DynamoDBClient: jest.fn(() => ({})),
+}));
+
+jest.mock('@aws-sdk/lib-dynamodb', () => ({
+  DynamoDBDocumentClient: {
+    from: jest.fn(() => ({
+      send: (...args: unknown[]) => mockSend(...args),
     })),
   },
+  GetCommand: jest.fn((params) => params),
+  QueryCommand: jest.fn((params) => params),
+  PutCommand: jest.fn((params) => params),
+  UpdateCommand: jest.fn((params) => params),
+  DeleteCommand: jest.fn((params) => params),
+  TransactWriteCommand: jest.fn((params) => params),
 }));
 
 describe('Integration: Connection Flow', () => {

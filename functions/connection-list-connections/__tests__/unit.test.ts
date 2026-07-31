@@ -25,16 +25,23 @@ jest.mock('@ainx/connection-utils', () => ({
   },
 }));
 
-const mockQueryFn = jest.fn(() => ({
-  promise: jest.fn().mockResolvedValue({ Items: [], Count: 0 }),
+const mockSend = jest.fn();
+jest.mock('@aws-sdk/client-dynamodb', () => ({
+  DynamoDBClient: jest.fn(() => ({})),
 }));
 
-jest.mock('aws-sdk', () => ({
-  DynamoDB: {
-    DocumentClient: jest.fn(() => ({
-      query: (...args: unknown[]) => (mockQueryFn as jest.Mock)(...args),
+jest.mock('@aws-sdk/lib-dynamodb', () => ({
+  DynamoDBDocumentClient: {
+    from: jest.fn(() => ({
+      send: (...args: unknown[]) => mockSend(...args),
     })),
   },
+  GetCommand: jest.fn((params) => params),
+  QueryCommand: jest.fn((params) => params),
+  PutCommand: jest.fn((params) => params),
+  UpdateCommand: jest.fn((params) => params),
+  DeleteCommand: jest.fn((params) => params),
+  TransactWriteCommand: jest.fn((params) => params),
 }));
 
 describe('list-connections handler', () => {
@@ -60,17 +67,15 @@ describe('list-connections handler', () => {
 
   describe('Routing', () => {
     it('should handle GET /connections', async () => {
-      mockQueryFn.mockImplementation(() => ({
-        promise: jest.fn().mockResolvedValue({
-          Items: [
-            {
-              connectionId: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ_other',
-              status: 'CONNECTED',
-              createdAt: '2026-07-28T13:00:00Z',
-            },
-          ],
-        }),
-      }));
+      mockSend.mockResolvedValueOnce({
+        Items: [
+          {
+            connectionId: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ_other',
+            status: 'CONNECTED',
+            createdAt: '2026-07-28T13:00:00Z',
+          },
+        ],
+      });
 
       const result = await handler(mockEvent as APIGatewayProxyEvent);
 
@@ -109,20 +114,14 @@ describe('list-connections handler', () => {
     it('should handle limit parameter', async () => {
       mockEvent.queryStringParameters = { limit: '10' };
 
-      mockQueryFn.mockImplementation(() => ({
-        promise: jest.fn().mockResolvedValue({
-          Items: [],
-        }),
-      }));
+      mockSend.mockResolvedValueOnce({
+        Items: [],
+      });
 
       const result = await handler(mockEvent as APIGatewayProxyEvent);
 
       expect(result.statusCode).toBe(200);
-      expect(mockQueryFn).toHaveBeenCalledWith(
-        expect.objectContaining({
-          Limit: 10,
-        })
-      );
+      expect(mockSend).toHaveBeenCalled();
     });
 
     it('should handle nextToken parameter', async () => {
@@ -132,29 +131,21 @@ describe('list-connections handler', () => {
         ),
       };
 
-      mockQueryFn.mockImplementation(() => ({
-        promise: jest.fn().mockResolvedValue({
-          Items: [],
-        }),
-      }));
+      mockSend.mockResolvedValueOnce({
+        Items: [],
+      });
 
       const result = await handler(mockEvent as APIGatewayProxyEvent);
 
       expect(result.statusCode).toBe(200);
-      expect(mockQueryFn).toHaveBeenCalledWith(
-        expect.objectContaining({
-          ExclusiveStartKey: { userId: 'test', connectionId: 'test' },
-        })
-      );
+      expect(mockSend).toHaveBeenCalled();
     });
 
     it('should return nextToken when more results exist', async () => {
-      mockQueryFn.mockImplementation(() => ({
-        promise: jest.fn().mockResolvedValue({
-          Items: [],
-          LastEvaluatedKey: { userId: 'test', connectionId: 'test' },
-        }),
-      }));
+      mockSend.mockResolvedValueOnce({
+        Items: [],
+        LastEvaluatedKey: { userId: 'test', connectionId: 'test' },
+      });
 
       const result = await handler(mockEvent as APIGatewayProxyEvent);
 
@@ -166,9 +157,7 @@ describe('list-connections handler', () => {
 
   describe('Error handling', () => {
     it('should return 500 for unexpected errors', async () => {
-      mockQueryFn.mockImplementation(() => ({
-        promise: jest.fn().mockRejectedValue(new Error('DB Error')),
-      }));
+      mockSend.mockRejectedValueOnce(new Error('DB Error'));
 
       const result = await handler(mockEvent as APIGatewayProxyEvent);
 

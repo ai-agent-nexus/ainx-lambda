@@ -5,7 +5,6 @@ import { APIGatewayProxyEvent } from 'aws-lambda';
 import { handler } from '../src/index';
 import { verifySignature } from '@ainx/crypto-utils';
 
-// Mock dependencies
 jest.mock('@ainx/logger');
 
 jest.mock('@ainx/shared-utils', () => ({
@@ -53,26 +52,23 @@ jest.mock('@ainx/crypto-utils', () => ({
   verifySignature: jest.fn(() => true),
 }));
 
-const mockPutFn = jest.fn(() => ({
-  promise: jest.fn().mockResolvedValue({}),
+const mockSend = jest.fn();
+jest.mock('@aws-sdk/client-dynamodb', () => ({
+  DynamoDBClient: jest.fn(() => ({})),
 }));
 
-const mockQueryFn = jest.fn(() => ({
-  promise: jest.fn().mockResolvedValue({ Items: [] }),
-}));
-
-const mockTransactWriteFn = jest.fn(() => ({
-  promise: jest.fn().mockResolvedValue({}),
-}));
-
-jest.mock('aws-sdk', () => ({
-  DynamoDB: {
-    DocumentClient: jest.fn(() => ({
-      put: (...args: unknown[]) => (mockPutFn as jest.Mock)(...args),
-      query: (...args: unknown[]) => (mockQueryFn as jest.Mock)(...args),
-      transactWrite: (...args: unknown[]) => (mockTransactWriteFn as jest.Mock)(...args),
+jest.mock('@aws-sdk/lib-dynamodb', () => ({
+  DynamoDBDocumentClient: {
+    from: jest.fn(() => ({
+      send: (...args: unknown[]) => mockSend(...args),
     })),
   },
+  GetCommand: jest.fn((params) => params),
+  QueryCommand: jest.fn((params) => params),
+  PutCommand: jest.fn((params) => params),
+  UpdateCommand: jest.fn((params) => params),
+  DeleteCommand: jest.fn((params) => params),
+  TransactWriteCommand: jest.fn((params) => params),
 }));
 
 describe('agent-registration handler', () => {
@@ -174,11 +170,7 @@ describe('agent-registration handler', () => {
     });
 
     it('should return 409 for duplicate DID', async () => {
-      mockTransactWriteFn.mockImplementationOnce(() => ({
-        promise: jest.fn().mockRejectedValue({
-          name: 'TransactionCanceledException',
-        }),
-      }));
+      mockSend.mockRejectedValueOnce({ name: 'TransactionCanceledException' });
 
       const result = await handler(mockEvent as APIGatewayProxyEvent);
 
@@ -188,9 +180,7 @@ describe('agent-registration handler', () => {
     });
 
     it('should return 500 for unexpected errors', async () => {
-      mockTransactWriteFn.mockImplementationOnce(() => ({
-        promise: jest.fn().mockRejectedValue(new Error('DB Error')),
-      }));
+      mockSend.mockRejectedValueOnce(new Error('DB Error'));
 
       const result = await handler(mockEvent as APIGatewayProxyEvent);
 
@@ -202,11 +192,7 @@ describe('agent-registration handler', () => {
 
   describe('Concurrency', () => {
     it('should handle concurrent registration attempts', async () => {
-      mockTransactWriteFn.mockImplementationOnce(() => ({
-        promise: jest.fn().mockRejectedValue({
-          name: 'TransactionCanceledException',
-        }),
-      }));
+      mockSend.mockRejectedValueOnce({ name: 'TransactionCanceledException' });
 
       const result = await handler(mockEvent as APIGatewayProxyEvent);
 

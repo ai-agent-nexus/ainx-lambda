@@ -1,6 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, QueryCommand, TransactWriteCommand } from '@aws-sdk/lib-dynamodb';
 import { Logger } from '@ainx/logger';
 import { formatResponse } from '@ainx/shared-utils';
 import {
@@ -45,10 +45,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       });
     }
 
-    const requestResult = await dynamodb.get({
+    const requestResult = await dynamodb.send(new GetCommand({
       TableName: CONNECTION_REQUESTS_TABLE_NAME,
       Key: { requestId },
-    });
+    }));
 
     if (!requestResult.Item) {
       logger.warn('Request not found', { requestId });
@@ -76,7 +76,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       });
     }
 
-    const connectionCount = await dynamodb.query({
+    const connectionCount = await dynamodb.send(new QueryCommand({
       TableName: CONNECTIONS_TABLE_NAME,
       KeyConditionExpression: 'userId = :userId',
       FilterExpression: '#status = :status',
@@ -88,7 +88,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         ':status': ConnectionStatus.CONNECTED,
       },
       Select: 'COUNT',
-    });
+    }));
 
     if ((connectionCount.Count || 0) >= CONNECTION_LIMIT) {
       logger.warn('Connection limit reached', { toDid, count: connectionCount.Count });
@@ -101,7 +101,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const now = new Date().toISOString();
     const ttl = Math.floor(Date.now() / 1000) + 90 * 24 * 60 * 60; // 90 days
 
-    await dynamodb.transactWrite({
+    await dynamodb.send(new TransactWriteCommand({
       TransactItems: [
         {
           Update: {
@@ -144,7 +144,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           },
         },
       ],
-    });
+    }));
 
     logger.info('Connection request accepted', { requestId, fromDid: request.fromDid, toDid });
 

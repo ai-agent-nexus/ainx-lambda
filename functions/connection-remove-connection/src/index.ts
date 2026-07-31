@@ -1,6 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, TransactWriteCommand } from '@aws-sdk/lib-dynamodb';
 import { Logger } from '@ainx/logger';
 import { formatResponse } from '@ainx/shared-utils';
 import { ConnectionStatus } from '@ainx/connection-utils';
@@ -40,13 +40,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       });
     }
 
-    const connectionResult = await dynamodb.get({
+    const connectionResult = await dynamodb.send(new GetCommand({
       TableName: CONNECTIONS_TABLE_NAME,
       Key: {
         userId,
         connectionId,
       },
-    });
+    }));
 
     if (!connectionResult.Item) {
       logger.warn('Connection not found', { userId, connectionId });
@@ -70,7 +70,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     const now = new Date().toISOString();
 
-    await dynamodb.transactWrite({
+    await dynamodb.send(new TransactWriteCommand({
       TransactItems: [
         {
           Update: {
@@ -107,7 +107,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           },
         },
       ],
-    });
+    }));
 
     logger.info('Connection removed', { userId, connectionId });
 

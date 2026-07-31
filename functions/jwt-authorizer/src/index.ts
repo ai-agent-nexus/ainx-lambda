@@ -1,6 +1,6 @@
 import { APIGatewayTokenAuthorizerEvent, APIGatewayAuthorizerResult } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand } from '@aws-sdk/lib-dynamodb';
 import jwt from 'jsonwebtoken';
 import { Logger } from '@ainx/logger';
 
@@ -79,10 +79,10 @@ export const handler = async (
 
     // Check if token is blacklisted
     try {
-      const blacklistResult = await dynamodb.get({
+      const blacklistResult = await dynamodb.send(new GetCommand({
         TableName: TOKEN_BLACKLIST_TABLE_NAME,
         Key: { jti },
-      });
+      }));
 
       if (blacklistResult.Item) {
         logger.warn('Token is blacklisted', { jti });

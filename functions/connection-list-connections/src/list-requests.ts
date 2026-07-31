@@ -1,6 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { Logger } from '@ainx/logger';
 import { formatResponse } from '@ainx/shared-utils';
 import { ConnectionRequestStatus } from '@ainx/connection-utils';
@@ -40,7 +40,16 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const limit = parseInt(event.queryStringParameters?.limit || '20', 10);
     const nextToken = event.queryStringParameters?.nextToken;
 
-    const queryParams = {
+    const queryParams: {
+      TableName: string;
+      IndexName: string;
+      KeyConditionExpression: string;
+      FilterExpression: string;
+      ExpressionAttributeNames: { '#status': string };
+      ExpressionAttributeValues: { ':toDid': string; ':status': ConnectionRequestStatus };
+      Limit: number;
+      ExclusiveStartKey?: Record<string, unknown>;
+    } = {
       TableName: CONNECTION_REQUESTS_TABLE_NAME,
       IndexName: 'ToDidIndex',
       KeyConditionExpression: 'toDid = :toDid',
@@ -59,7 +68,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       queryParams.ExclusiveStartKey = JSON.parse(Buffer.from(nextToken, 'base64').toString());
     }
 
-    const result = await dynamodb.query(queryParams);
+    const result = await dynamodb.send(new QueryCommand(queryParams));
 
     const requests = (result.Items || []).map((item) => ({
       requestId: item.requestId as string,

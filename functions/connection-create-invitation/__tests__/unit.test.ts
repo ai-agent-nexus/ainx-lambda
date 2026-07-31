@@ -45,16 +45,23 @@ jest.mock('@ainx/connection-utils', () => ({
   MAX_INVITATION_TTL_SECONDS: 86400,
 }));
 
-const mockPutFn = jest.fn(() => ({
-  promise: jest.fn().mockResolvedValue({}),
+const mockSend = jest.fn();
+jest.mock('@aws-sdk/client-dynamodb', () => ({
+  DynamoDBClient: jest.fn(() => ({})),
 }));
 
-jest.mock('aws-sdk', () => ({
-  DynamoDB: {
-    DocumentClient: jest.fn(() => ({
-      put: (...args: unknown[]) => (mockPutFn as jest.Mock)(...args),
+jest.mock('@aws-sdk/lib-dynamodb', () => ({
+  DynamoDBDocumentClient: {
+    from: jest.fn(() => ({
+      send: (...args: unknown[]) => mockSend(...args),
     })),
   },
+  GetCommand: jest.fn((params) => params),
+  QueryCommand: jest.fn((params) => params),
+  PutCommand: jest.fn((params) => params),
+  UpdateCommand: jest.fn((params) => params),
+  DeleteCommand: jest.fn((params) => params),
+  TransactWriteCommand: jest.fn((params) => params),
 }));
 
 describe('create-invitation handler', () => {
@@ -152,7 +159,7 @@ describe('create-invitation handler', () => {
       const body = JSON.parse(result.body);
       expect(body.invitationCode).toBe('550e8400-e29b-41d4-a716-446655440000');
       expect(body.expiresAt).toBe('2026-07-28T13:30:00Z');
-      expect(mockPutFn).toHaveBeenCalled();
+      expect(mockSend).toHaveBeenCalled();
     });
 
     it('should create invitation with custom expiration', async () => {
@@ -168,9 +175,7 @@ describe('create-invitation handler', () => {
 
   describe('Error handling', () => {
     it('should return 500 for unexpected errors', async () => {
-      mockPutFn.mockImplementationOnce(() => ({
-        promise: jest.fn().mockRejectedValue(new Error('DB Error')),
-      }));
+      mockSend.mockRejectedValueOnce(new Error('DB Error'));
 
       const result = await handler(mockEvent as APIGatewayProxyEvent);
 

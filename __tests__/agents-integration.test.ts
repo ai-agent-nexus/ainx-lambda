@@ -280,38 +280,24 @@ const mockTransactWriteFn = jest.fn((params: { TransactItems: Array<unknown> }) 
   }),
 }));
 
-jest.mock('aws-sdk', () => ({
-  DynamoDB: {
-    DocumentClient: jest.fn(() => ({
-      put: (_params: unknown) =>
-        mockPutFn(
-          _params as {
-            TableName: string;
-            Item: Record<string, unknown>;
-            ConditionExpression?: string;
-          }
-        ),
-      get: (_params: unknown) =>
-        mockGetFn(_params as { TableName: string; Key: Record<string, unknown> }),
-      query: (_params: unknown) =>
-        mockQueryFn(
-          _params as { TableName: string; ExpressionAttributeValues: Record<string, unknown> }
-        ),
-      update: (_params: unknown) =>
-        mockUpdateFn(
-          _params as {
-            TableName: string;
-            Key: Record<string, unknown>;
-            UpdateExpression: string;
-            ExpressionAttributeValues: Record<string, unknown>;
-          }
-        ),
-      delete: (_params: unknown) =>
-        mockDeleteFn(_params as { TableName: string; Key: Record<string, unknown> }),
-      transactWrite: (_params: unknown) =>
-        mockTransactWriteFn(_params as { TransactItems: Array<unknown> }),
+// Mock the DynamoDB client - use a single mockSend that can be controlled
+const mockSend = jest.fn();
+jest.mock('@aws-sdk/client-dynamodb', () => ({
+  DynamoDBClient: jest.fn(() => ({})),
+}));
+
+jest.mock('@aws-sdk/lib-dynamodb', () => ({
+  DynamoDBDocumentClient: {
+    from: jest.fn(() => ({
+      send: (...args: unknown[]) => mockSend(...args),
     })),
   },
+  GetCommand: jest.fn((params) => params),
+  QueryCommand: jest.fn((params) => params),
+  PutCommand: jest.fn((params) => params),
+  UpdateCommand: jest.fn((params) => params),
+  DeleteCommand: jest.fn((params) => params),
+  TransactWriteCommand: jest.fn((params) => params),
 }));
 
 describe('Integration: Agent Management Flow', () => {
@@ -850,9 +836,7 @@ describe('Integration: Agent Management Flow', () => {
 
   describe('Error scenarios', () => {
     it('should handle DynamoDB errors in registration', async () => {
-      mockTransactWriteFn.mockImplementationOnce(() => ({
-        promise: jest.fn().mockRejectedValue(new Error('DynamoDB Error')),
-      }));
+      mockSend.mockRejectedValueOnce(new Error('DynamoDB Error'));
 
       const registerEvent: Partial<APIGatewayProxyEvent> = {
         path: '/agents/register',
@@ -885,9 +869,7 @@ describe('Integration: Agent Management Flow', () => {
       await registrationHandler(registerEvent as APIGatewayProxyEvent);
 
       // Mock DynamoDB error
-      mockTransactWriteFn.mockImplementationOnce(() => ({
-        promise: jest.fn().mockRejectedValue(new Error('DynamoDB Error')),
-      }));
+      mockSend.mockRejectedValueOnce(new Error('DynamoDB Error'));
 
       const rotateEvent: Partial<APIGatewayProxyEvent> = {
         path: '/agents/rotate-key',

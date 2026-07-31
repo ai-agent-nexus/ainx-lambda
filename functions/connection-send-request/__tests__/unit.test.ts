@@ -61,37 +61,36 @@ jest.mock('@ainx/connection-utils', () => ({
   },
 }));
 
-jest.mock('aws-sdk', () => ({
-  DynamoDB: {
-    DocumentClient: jest.fn(() => ({
-      get: jest.fn(() => ({
-        promise: jest.fn().mockImplementation(() => {
-          if (shouldThrowError) {
-            return Promise.reject(new Error('DB Error'));
-          }
+// Mock the DynamoDB client - use a single mockSend that can be controlled
+const mockSend = jest.fn();
+jest.mock('@aws-sdk/client-dynamodb', () => ({
+  DynamoDBClient: jest.fn(() => ({})),
+}));
+
+jest.mock('@aws-sdk/lib-dynamodb', () => ({
+  DynamoDBDocumentClient: {
+    from: jest.fn(() => ({
+      send: (...args: unknown[]) => {
+        const command = args[0] as { TableName: string; Key?: Record<string, unknown> };
+        if (command.TableName === 'test-invitations-table') {
           return Promise.resolve(invitationResponse);
-        }),
-      })),
-      query: jest.fn((params: Record<string, unknown>) => ({
-        promise: jest.fn().mockImplementation(() => {
-          if (shouldThrowError) {
-            return Promise.reject(new Error('DB Error'));
-          }
-          const tableName = params.TableName as string;
-          if (tableName && tableName.includes('connection-requests')) {
-            return Promise.resolve({ Items: [], Count: 0 });
-          }
-          if (tableName && tableName.includes('connections')) {
-            return Promise.resolve({ Items: [], Count: 0 });
-          }
+        }
+        if (command.TableName === 'test-agent-registration-table') {
           return Promise.resolve(agentResponse);
-        }),
-      })),
-      put: jest.fn(() => ({
-        promise: jest.fn().mockResolvedValue({}),
-      })),
+        }
+        if (shouldThrowError) {
+          return Promise.reject(new Error('DB Error'));
+        }
+        return Promise.resolve({});
+      },
     })),
   },
+  GetCommand: jest.fn((params) => params),
+  QueryCommand: jest.fn((params) => params),
+  PutCommand: jest.fn((params) => params),
+  UpdateCommand: jest.fn((params) => params),
+  DeleteCommand: jest.fn((params) => params),
+  TransactWriteCommand: jest.fn((params) => params),
 }));
 
 // Import handler AFTER all mocks

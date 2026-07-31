@@ -1,6 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, GetCommand, QueryCommand, TransactWriteCommand } from '@aws-sdk/lib-dynamodb';
 import jwt from 'jsonwebtoken';
 import { Logger } from '@ainx/logger';
 import { formatResponse, parseBody, validateInput } from '@ainx/shared-utils';
@@ -75,10 +75,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     // Verify refresh token exists and is valid
     let refreshTokenData: Record<string, unknown> | undefined;
     try {
-      const tokenResult = await dynamodb.get({
+      const tokenResult = await dynamodb.send(new GetCommand({
         TableName: REFRESH_TOKEN_TABLE_NAME,
         Key: { token: refresh_token },
-      });
+      }));
 
       if (!tokenResult.Item) {
         logger.warn('Refresh token not found', {
@@ -127,7 +127,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     // Verify DID is still active
     try {
-      const didResult = await dynamodb.query({
+      const didResult = await dynamodb.send(new QueryCommand({
         TableName: AGENT_REGISTRATION_TABLE_NAME,
         IndexName: 'DidIndex',
         KeyConditionExpression: 'did = :did',
@@ -139,7 +139,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           ':did': did,
           ':status': 'active',
         },
-      });
+      }));
 
       if (!didResult.Items || didResult.Items.length === 0) {
         logger.warn('DID not active', { did });
@@ -191,7 +191,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     // Store new refresh token and delete old one (transaction)
     try {
-      await dynamodb.transactWrite({
+      await dynamodb.send(new TransactWriteCommand({
         TransactItems: [
           {
             Put: {
@@ -214,7 +214,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             },
           },
         ],
-      });
+      }));
     } catch (err) {
       logger.error('Error updating refresh token', { error: (err as Error).message });
       return formatResponse(500, {
