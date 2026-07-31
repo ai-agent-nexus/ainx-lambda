@@ -15,9 +15,8 @@
   "dependencies": {
     "@ainx/logger": "^1.0.0",
     "@ainx/shared-utils": "^1.0.0",
-    "aws-sdk": "^2.1693.0",
     "jsonwebtoken": "^9.0.0",
-    "uuid": "^9.0.0"
+    "uuid": "^14.0.1"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.149",

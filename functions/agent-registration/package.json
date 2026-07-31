@@ -17,8 +17,7 @@
     "@ainx/crypto-utils": "^1.0.0",
     "@ainx/did-utils": "^1.0.0",
     "@ainx/logger": "^1.0.0",
-    "@ainx/shared-utils": "^1.0.0",
-    "aws-sdk": "^2.1693.0"
+    "@ainx/shared-utils": "^1.0.0"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.149",

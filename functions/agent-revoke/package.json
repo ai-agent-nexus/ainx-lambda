@@ -15,7 +15,6 @@
   "dependencies": {
     "@ainx/logger": "^1.0.0",
     "@ainx/shared-utils": "^1.0.0",
-    "aws-sdk": "^2.1693.0",
     "jsonwebtoken": "^9.0.0"
   },
   "devDependencies": {
