@@ -1,11 +1,19 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { DynamoDB } from 'aws-sdk';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import {
+  DynamoDBDocumentClient,
+  GetCommand,
+  QueryCommand,
+  DeleteCommand,
+  UpdateCommand,
+} from '@aws-sdk/lib-dynamodb';
 import jwt from 'jsonwebtoken';
 import { Logger } from '@ainx/logger';
 import { formatResponse } from '@ainx/shared-utils';
 
 const logger = new Logger('agent-revoke');
-const dynamodb = new DynamoDB.DocumentClient();
+const client = new DynamoDBClient({});
+const dynamodb = DynamoDBDocumentClient.from(client);
 
 const AGENT_REGISTRATION_TABLE_NAME = process.env.AGENT_REGISTRATION_TABLE_NAME!;
 const DID_UNIQUENESS_TABLE_NAME = process.env.DID_UNIQUENESS_TABLE_NAME!;
@@ -118,12 +126,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     // Verify DID exists and is active
     try {
-      const didResult = await dynamodb
-        .get({
+      const didResult = await dynamodb.send(
+        new GetCommand({
           TableName: AGENT_REGISTRATION_TABLE_NAME,
           Key: { userId, did: targetDid },
         })
-        .promise();
+      );
 
       if (!didResult.Item) {
         logger.warn('DID not found', { did: targetDid });
@@ -152,8 +160,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     // Update agent status to revoked
     try {
-      await dynamodb
-        .update({
+      await dynamodb.send(
+        new UpdateCommand({
           TableName: AGENT_REGISTRATION_TABLE_NAME,
           Key: { userId, did: targetDid },
           UpdateExpression: 'SET #status = :status, revokedAt = :revokedAt, updatedAt = :updatedAt',
@@ -166,7 +174,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             ':updatedAt': now.toISOString(),
           },
         })
-        .promise();
+      );
     } catch (err) {
       logger.error('Error updating agent status', {
         error: (err as Error).message,
@@ -181,8 +189,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     // Delete all refresh tokens for this user
     try {
       // Query all refresh tokens for this user
-      const tokenResult = await dynamodb
-        .query({
+      const tokenResult = await dynamodb.send(
+        new QueryCommand({
           TableName: REFRESH_TOKEN_TABLE_NAME,
           IndexName: 'UserIdIndex',
           KeyConditionExpression: 'userId = :userId',
@@ -190,16 +198,16 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             ':userId': userId,
           },
         })
-        .promise();
+      );
 
       if (tokenResult.Items) {
         for (const item of tokenResult.Items) {
-          await dynamodb
-            .delete({
+          await dynamodb.send(
+            new DeleteCommand({
               TableName: REFRESH_TOKEN_TABLE_NAME,
               Key: { token: item.token },
             })
-            .promise();
+          );
         }
       }
     } catch (err) {

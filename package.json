@@ -25,6 +25,8 @@
     "@ainx/connection-utils": "*",
     "@ainx/crypto-utils": "*",
     "@ainx/did-utils": "*",
+    "@aws-sdk/client-dynamodb": "^3.1100.0",
+    "@aws-sdk/lib-dynamodb": "^3.1100.0",
     "@types/aws-lambda": "^8.10.149",
     "@types/jest": "^29.5.14",
     "@types/jsonwebtoken": "^9.0.10",

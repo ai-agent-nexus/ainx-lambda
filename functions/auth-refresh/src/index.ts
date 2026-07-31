@@ -1,12 +1,14 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { DynamoDB } from 'aws-sdk';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import jwt from 'jsonwebtoken';
 import { Logger } from '@ainx/logger';
 import { formatResponse, parseBody, validateInput } from '@ainx/shared-utils';
 import { v4 as uuidv4 } from 'uuid';
 
 const logger = new Logger('auth-refresh');
-const dynamodb = new DynamoDB.DocumentClient();
+const client = new DynamoDBClient({});
+const dynamodb = DynamoDBDocumentClient.from(client);
 
 const REFRESH_TOKEN_TABLE_NAME = process.env.REFRESH_TOKEN_TABLE_NAME!;
 const AGENT_REGISTRATION_TABLE_NAME = process.env.AGENT_REGISTRATION_TABLE_NAME!;
@@ -73,12 +75,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     // Verify refresh token exists and is valid
     let refreshTokenData: Record<string, unknown> | undefined;
     try {
-      const tokenResult = await dynamodb
-        .get({
-          TableName: REFRESH_TOKEN_TABLE_NAME,
-          Key: { token: refresh_token },
-        })
-        .promise();
+      const tokenResult = await dynamodb.get({
+        TableName: REFRESH_TOKEN_TABLE_NAME,
+        Key: { token: refresh_token },
+      });
 
       if (!tokenResult.Item) {
         logger.warn('Refresh token not found', {
@@ -127,21 +127,19 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     // Verify DID is still active
     try {
-      const didResult = await dynamodb
-        .query({
-          TableName: AGENT_REGISTRATION_TABLE_NAME,
-          IndexName: 'DidIndex',
-          KeyConditionExpression: 'did = :did',
-          FilterExpression: '#status = :status',
-          ExpressionAttributeNames: {
-            '#status': 'status',
-          },
-          ExpressionAttributeValues: {
-            ':did': did,
-            ':status': 'active',
-          },
-        })
-        .promise();
+      const didResult = await dynamodb.query({
+        TableName: AGENT_REGISTRATION_TABLE_NAME,
+        IndexName: 'DidIndex',
+        KeyConditionExpression: 'did = :did',
+        FilterExpression: '#status = :status',
+        ExpressionAttributeNames: {
+          '#status': 'status',
+        },
+        ExpressionAttributeValues: {
+          ':did': did,
+          ':status': 'active',
+        },
+      });
 
       if (!didResult.Items || didResult.Items.length === 0) {
         logger.warn('DID not active', { did });
@@ -193,32 +191,30 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     // Store new refresh token and delete old one (transaction)
     try {
-      await dynamodb
-        .transactWrite({
-          TransactItems: [
-            {
-              Put: {
-                TableName: REFRESH_TOKEN_TABLE_NAME,
-                Item: {
-                  token: newRefreshToken,
-                  userId,
-                  did,
-                  createdAt: new Date().toISOString(),
-                  expiresAt: refreshTokenExpiresAt.toISOString(),
-                  ttl: refreshTokenTtl,
-                  isRevoked: false,
-                },
+      await dynamodb.transactWrite({
+        TransactItems: [
+          {
+            Put: {
+              TableName: REFRESH_TOKEN_TABLE_NAME,
+              Item: {
+                token: newRefreshToken,
+                userId,
+                did,
+                createdAt: new Date().toISOString(),
+                expiresAt: refreshTokenExpiresAt.toISOString(),
+                ttl: refreshTokenTtl,
+                isRevoked: false,
               },
             },
-            {
-              Delete: {
-                TableName: REFRESH_TOKEN_TABLE_NAME,
-                Key: { token: refresh_token },
-              },
+          },
+          {
+            Delete: {
+              TableName: REFRESH_TOKEN_TABLE_NAME,
+              Key: { token: refresh_token },
             },
-          ],
-        })
-        .promise();
+          },
+        ],
+      });
     } catch (err) {
       logger.error('Error updating refresh token', { error: (err as Error).message });
       return formatResponse(500, {

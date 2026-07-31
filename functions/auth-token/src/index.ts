@@ -1,5 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { DynamoDB } from 'aws-sdk';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import jwt from 'jsonwebtoken';
 import { Logger } from '@ainx/logger';
 import { formatResponse, parseBody, validateInput } from '@ainx/shared-utils';
@@ -8,7 +9,8 @@ import { verifySignature } from '@ainx/crypto-utils';
 import { v4 as uuidv4 } from 'uuid';
 
 const logger = new Logger('auth-token');
-const dynamodb = new DynamoDB.DocumentClient();
+const client = new DynamoDBClient({});
+const dynamodb = DynamoDBDocumentClient.from(client);
 
 const AGENT_REGISTRATION_TABLE_NAME = process.env.AGENT_REGISTRATION_TABLE_NAME!;
 const CHALLENGE_TABLE_NAME = process.env.CHALLENGE_TABLE_NAME!;
@@ -119,22 +121,18 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     // Verify challenge exists and is valid
     let challengeValid = false;
     try {
-      const challengeResult = await dynamodb
-        .get({
-          TableName: CHALLENGE_TABLE_NAME,
-          Key: { did },
-        })
-        .promise();
+      const challengeResult = await dynamodb.get({
+        TableName: CHALLENGE_TABLE_NAME,
+        Key: { did },
+      });
 
       if (challengeResult.Item && challengeResult.Item.challenge === challenge) {
         challengeValid = true;
         // Delete challenge after use (one-time use)
-        await dynamodb
-          .delete({
-            TableName: CHALLENGE_TABLE_NAME,
-            Key: { did },
-          })
-          .promise();
+        await dynamodb.delete({
+          TableName: CHALLENGE_TABLE_NAME,
+          Key: { did },
+        });
       }
     } catch (err) {
       logger.error('Error verifying challenge', { error: (err as Error).message, did });
@@ -155,21 +153,19 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     // Verify DID exists and is active
     let userId: string;
     try {
-      const didResult = await dynamodb
-        .query({
-          TableName: AGENT_REGISTRATION_TABLE_NAME,
-          IndexName: 'DidIndex',
-          KeyConditionExpression: 'did = :did',
-          FilterExpression: '#status = :status',
-          ExpressionAttributeNames: {
-            '#status': 'status',
-          },
-          ExpressionAttributeValues: {
-            ':did': did,
-            ':status': 'active',
-          },
-        })
-        .promise();
+      const didResult = await dynamodb.query({
+        TableName: AGENT_REGISTRATION_TABLE_NAME,
+        IndexName: 'DidIndex',
+        KeyConditionExpression: 'did = :did',
+        FilterExpression: '#status = :status',
+        ExpressionAttributeNames: {
+          '#status': 'status',
+        },
+        ExpressionAttributeValues: {
+          ':did': did,
+          ':status': 'active',
+        },
+      });
 
       if (!didResult.Items || didResult.Items.length === 0) {
         logger.warn('DID not found', { did });
@@ -223,20 +219,18 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     // Store refresh token
     try {
-      await dynamodb
-        .put({
-          TableName: REFRESH_TOKEN_TABLE_NAME,
-          Item: {
-            token: refreshToken,
-            userId,
-            did,
-            createdAt: new Date().toISOString(),
-            expiresAt: refreshTokenExpiresAt.toISOString(),
-            ttl: refreshTokenTtl,
-            isRevoked: false,
-          },
-        })
-        .promise();
+      await dynamodb.put({
+        TableName: REFRESH_TOKEN_TABLE_NAME,
+        Item: {
+          token: refreshToken,
+          userId,
+          did,
+          createdAt: new Date().toISOString(),
+          expiresAt: refreshTokenExpiresAt.toISOString(),
+          ttl: refreshTokenTtl,
+          isRevoked: false,
+        },
+      });
     } catch (err) {
       logger.error('Error storing refresh token', { error: (err as Error).message });
       return formatResponse(500, {

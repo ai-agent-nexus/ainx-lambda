@@ -1,5 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { DynamoDB } from 'aws-sdk';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { Logger } from '@ainx/logger';
 import { formatResponse } from '@ainx/shared-utils';
 import {
@@ -9,7 +10,8 @@ import {
 } from '@ainx/connection-utils';
 
 const logger = new Logger('accept-request');
-const dynamodb = new DynamoDB.DocumentClient();
+const client = new DynamoDBClient({});
+const dynamodb = DynamoDBDocumentClient.from(client);
 const CONNECTION_REQUESTS_TABLE_NAME = process.env.CONNECTION_REQUESTS_TABLE_NAME!;
 const CONNECTIONS_TABLE_NAME = process.env.CONNECTIONS_TABLE_NAME!;
 
@@ -43,12 +45,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       });
     }
 
-    const requestResult = await dynamodb
-      .get({
-        TableName: CONNECTION_REQUESTS_TABLE_NAME,
-        Key: { requestId },
-      })
-      .promise();
+    const requestResult = await dynamodb.get({
+      TableName: CONNECTION_REQUESTS_TABLE_NAME,
+      Key: { requestId },
+    });
 
     if (!requestResult.Item) {
       logger.warn('Request not found', { requestId });
@@ -76,21 +76,19 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       });
     }
 
-    const connectionCount = await dynamodb
-      .query({
-        TableName: CONNECTIONS_TABLE_NAME,
-        KeyConditionExpression: 'userId = :userId',
-        FilterExpression: '#status = :status',
-        ExpressionAttributeNames: {
-          '#status': 'status',
-        },
-        ExpressionAttributeValues: {
-          ':userId': toDid,
-          ':status': ConnectionStatus.CONNECTED,
-        },
-        Select: 'COUNT',
-      })
-      .promise();
+    const connectionCount = await dynamodb.query({
+      TableName: CONNECTIONS_TABLE_NAME,
+      KeyConditionExpression: 'userId = :userId',
+      FilterExpression: '#status = :status',
+      ExpressionAttributeNames: {
+        '#status': 'status',
+      },
+      ExpressionAttributeValues: {
+        ':userId': toDid,
+        ':status': ConnectionStatus.CONNECTED,
+      },
+      Select: 'COUNT',
+    });
 
     if ((connectionCount.Count || 0) >= CONNECTION_LIMIT) {
       logger.warn('Connection limit reached', { toDid, count: connectionCount.Count });
@@ -103,52 +101,50 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const now = new Date().toISOString();
     const ttl = Math.floor(Date.now() / 1000) + 90 * 24 * 60 * 60; // 90 days
 
-    await dynamodb
-      .transactWrite({
-        TransactItems: [
-          {
-            Update: {
-              TableName: CONNECTION_REQUESTS_TABLE_NAME,
-              Key: { requestId },
-              UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
-              ExpressionAttributeNames: {
-                '#status': 'status',
-              },
-              ExpressionAttributeValues: {
-                ':status': ConnectionRequestStatus.ACCEPTED,
-                ':updatedAt': now,
-              },
+    await dynamodb.transactWrite({
+      TransactItems: [
+        {
+          Update: {
+            TableName: CONNECTION_REQUESTS_TABLE_NAME,
+            Key: { requestId },
+            UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
+            ExpressionAttributeNames: {
+              '#status': 'status',
+            },
+            ExpressionAttributeValues: {
+              ':status': ConnectionRequestStatus.ACCEPTED,
+              ':updatedAt': now,
             },
           },
-          {
-            Put: {
-              TableName: CONNECTIONS_TABLE_NAME,
-              Item: {
-                userId: request.fromDid,
-                connectionId: request.toDid,
-                status: ConnectionStatus.CONNECTED,
-                createdAt: now,
-                updatedAt: now,
-                ttl,
-              },
+        },
+        {
+          Put: {
+            TableName: CONNECTIONS_TABLE_NAME,
+            Item: {
+              userId: request.fromDid,
+              connectionId: request.toDid,
+              status: ConnectionStatus.CONNECTED,
+              createdAt: now,
+              updatedAt: now,
+              ttl,
             },
           },
-          {
-            Put: {
-              TableName: CONNECTIONS_TABLE_NAME,
-              Item: {
-                userId: request.toDid,
-                connectionId: request.fromDid,
-                status: ConnectionStatus.CONNECTED,
-                createdAt: now,
-                updatedAt: now,
-                ttl,
-              },
+        },
+        {
+          Put: {
+            TableName: CONNECTIONS_TABLE_NAME,
+            Item: {
+              userId: request.toDid,
+              connectionId: request.fromDid,
+              status: ConnectionStatus.CONNECTED,
+              createdAt: now,
+              updatedAt: now,
+              ttl,
             },
           },
-        ],
-      })
-      .promise();
+        },
+      ],
+    });
 
     logger.info('Connection request accepted', { requestId, fromDid: request.fromDid, toDid });
 

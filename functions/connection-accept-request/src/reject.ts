@@ -1,11 +1,13 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { DynamoDB } from 'aws-sdk';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { Logger } from '@ainx/logger';
 import { formatResponse } from '@ainx/shared-utils';
 import { ConnectionRequestStatus } from '@ainx/connection-utils';
 
 const logger = new Logger('reject-request');
-const dynamodb = new DynamoDB.DocumentClient();
+const client = new DynamoDBClient({});
+const dynamodb = DynamoDBDocumentClient.from(client);
 const CONNECTION_REQUESTS_TABLE_NAME = process.env.CONNECTION_REQUESTS_TABLE_NAME!;
 
 if (!CONNECTION_REQUESTS_TABLE_NAME) {
@@ -38,12 +40,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       });
     }
 
-    const requestResult = await dynamodb
-      .get({
-        TableName: CONNECTION_REQUESTS_TABLE_NAME,
-        Key: { requestId },
-      })
-      .promise();
+    const requestResult = await dynamodb.get({
+      TableName: CONNECTION_REQUESTS_TABLE_NAME,
+      Key: { requestId },
+    });
 
     if (!requestResult.Item) {
       logger.warn('Request not found', { requestId });
@@ -73,20 +73,18 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     const now = new Date().toISOString();
 
-    await dynamodb
-      .update({
-        TableName: CONNECTION_REQUESTS_TABLE_NAME,
-        Key: { requestId },
-        UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
-        ExpressionAttributeNames: {
-          '#status': 'status',
-        },
-        ExpressionAttributeValues: {
-          ':status': ConnectionRequestStatus.REJECTED,
-          ':updatedAt': now,
-        },
-      })
-      .promise();
+    await dynamodb.update({
+      TableName: CONNECTION_REQUESTS_TABLE_NAME,
+      Key: { requestId },
+      UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
+      ExpressionAttributeNames: {
+        '#status': 'status',
+      },
+      ExpressionAttributeValues: {
+        ':status': ConnectionRequestStatus.REJECTED,
+        ':updatedAt': now,
+      },
+    });
 
     logger.info('Connection request rejected', { requestId, fromDid: request.fromDid, toDid });
 

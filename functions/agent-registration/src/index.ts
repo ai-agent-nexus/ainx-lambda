@@ -1,5 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { DynamoDB } from 'aws-sdk';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, TransactWriteCommand } from '@aws-sdk/lib-dynamodb';
 import crypto from 'crypto';
 import { Logger } from '@ainx/logger';
 import { formatResponse, parseBody, validateInput } from '@ainx/shared-utils';
@@ -7,7 +8,8 @@ import { parseDidKey } from '@ainx/did-utils';
 import { verifySignature } from '@ainx/crypto-utils';
 
 const logger = new Logger('agent-registration');
-const dynamodb = new DynamoDB.DocumentClient();
+const client = new DynamoDBClient({});
+const dynamodb = DynamoDBDocumentClient.from(client);
 const TABLE_NAME = process.env.AGENT_REGISTRATION_TABLE_NAME!;
 const DID_UNIQUENESS_TABLE_NAME = process.env.DID_UNIQUENESS_TABLE_NAME!;
 
@@ -112,8 +114,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     };
 
     try {
-      await dynamodb
-        .transactWrite({
+      await dynamodb.send(
+        new TransactWriteCommand({
           TransactItems: [
             {
               Put: {
@@ -136,7 +138,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             },
           ],
         })
-        .promise();
+      );
     } catch (err) {
       if ((err as Error).name === 'TransactionCanceledException') {
         logger.warn('Duplicate DID registration attempt', { did });

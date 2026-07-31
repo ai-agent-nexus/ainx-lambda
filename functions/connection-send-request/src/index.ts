@@ -1,5 +1,6 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { DynamoDB } from 'aws-sdk';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { Logger } from '@ainx/logger';
 import { formatResponse, parseBody, validateInput } from '@ainx/shared-utils';
 import {
@@ -13,7 +14,8 @@ import {
 } from '@ainx/connection-utils';
 
 const logger = new Logger('send-request');
-const dynamodb = new DynamoDB.DocumentClient();
+const client = new DynamoDBClient({});
+const dynamodb = DynamoDBDocumentClient.from(client);
 const CONNECTION_REQUESTS_TABLE_NAME = process.env.CONNECTION_REQUESTS_TABLE_NAME!;
 const CONNECTIONS_TABLE_NAME = process.env.CONNECTIONS_TABLE_NAME!;
 const INVITATIONS_TABLE_NAME = process.env.INVITATIONS_TABLE_NAME!;
@@ -98,12 +100,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       });
     }
 
-    const invitationResult = await dynamodb
-      .get({
-        TableName: INVITATIONS_TABLE_NAME,
-        Key: { invitationCode },
-      })
-      .promise();
+    const invitationResult = await dynamodb.get({
+      TableName: INVITATIONS_TABLE_NAME,
+      Key: { invitationCode },
+    });
 
     if (!invitationResult.Item) {
       logger.warn('Invitation not found', { invitationCode });
@@ -123,21 +123,19 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       });
     }
 
-    const agentResult = await dynamodb
-      .query({
-        TableName: AGENT_REGISTRATION_TABLE_NAME,
-        IndexName: 'DidIndex',
-        KeyConditionExpression: 'did = :did',
-        FilterExpression: '#status = :status',
-        ExpressionAttributeNames: {
-          '#status': 'status',
-        },
-        ExpressionAttributeValues: {
-          ':did': toDid,
-          ':status': 'active',
-        },
-      })
-      .promise();
+    const agentResult = await dynamodb.query({
+      TableName: AGENT_REGISTRATION_TABLE_NAME,
+      IndexName: 'DidIndex',
+      KeyConditionExpression: 'did = :did',
+      FilterExpression: '#status = :status',
+      ExpressionAttributeNames: {
+        '#status': 'status',
+      },
+      ExpressionAttributeValues: {
+        ':did': toDid,
+        ':status': 'active',
+      },
+    });
 
     if (!agentResult.Items || agentResult.Items.length === 0) {
       logger.warn('Target agent not found or not active', { toDid });
@@ -147,22 +145,20 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       });
     }
 
-    const existingRequest = await dynamodb
-      .query({
-        TableName: CONNECTION_REQUESTS_TABLE_NAME,
-        IndexName: 'ToDidIndex',
-        KeyConditionExpression: 'toDid = :toDid',
-        FilterExpression: '#status = :status AND fromDid = :fromDid',
-        ExpressionAttributeNames: {
-          '#status': 'status',
-        },
-        ExpressionAttributeValues: {
-          ':toDid': toDid,
-          ':status': ConnectionRequestStatus.PENDING,
-          ':fromDid': fromDid,
-        },
-      })
-      .promise();
+    const existingRequest = await dynamodb.query({
+      TableName: CONNECTION_REQUESTS_TABLE_NAME,
+      IndexName: 'ToDidIndex',
+      KeyConditionExpression: 'toDid = :toDid',
+      FilterExpression: '#status = :status AND fromDid = :fromDid',
+      ExpressionAttributeNames: {
+        '#status': 'status',
+      },
+      ExpressionAttributeValues: {
+        ':toDid': toDid,
+        ':status': ConnectionRequestStatus.PENDING,
+        ':fromDid': fromDid,
+      },
+    });
 
     if (existingRequest.Items && existingRequest.Items.length > 0) {
       logger.warn('Duplicate connection request', { fromDid, toDid });
@@ -172,21 +168,19 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       });
     }
 
-    const connectionCount = await dynamodb
-      .query({
-        TableName: CONNECTIONS_TABLE_NAME,
-        KeyConditionExpression: 'userId = :userId',
-        FilterExpression: '#status = :status',
-        ExpressionAttributeNames: {
-          '#status': 'status',
-        },
-        ExpressionAttributeValues: {
-          ':userId': fromDid,
-          ':status': 'CONNECTED',
-        },
-        Select: 'COUNT',
-      })
-      .promise();
+    const connectionCount = await dynamodb.query({
+      TableName: CONNECTIONS_TABLE_NAME,
+      KeyConditionExpression: 'userId = :userId',
+      FilterExpression: '#status = :status',
+      ExpressionAttributeNames: {
+        '#status': 'status',
+      },
+      ExpressionAttributeValues: {
+        ':userId': fromDid,
+        ':status': 'CONNECTED',
+      },
+      Select: 'COUNT',
+    });
 
     if ((connectionCount.Count || 0) >= CONNECTION_LIMIT) {
       logger.warn('Connection limit reached', { fromDid, count: connectionCount.Count });
@@ -199,22 +193,20 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const requestId = generateRequestId();
     const now = new Date().toISOString();
 
-    await dynamodb
-      .put({
-        TableName: CONNECTION_REQUESTS_TABLE_NAME,
-        Item: {
-          requestId,
-          fromDid,
-          toDid,
-          invitationCode,
-          status: ConnectionRequestStatus.PENDING,
-          createdAt: now,
-          updatedAt: now,
-          expiresAt: invitation.expiresAt,
-          ttl: invitation.ttl,
-        },
-      })
-      .promise();
+    await dynamodb.put({
+      TableName: CONNECTION_REQUESTS_TABLE_NAME,
+      Item: {
+        requestId,
+        fromDid,
+        toDid,
+        invitationCode,
+        status: ConnectionRequestStatus.PENDING,
+        createdAt: now,
+        updatedAt: now,
+        expiresAt: invitation.expiresAt,
+        ttl: invitation.ttl,
+      },
+    });
 
     logger.info('Connection request created', { requestId, fromDid, toDid, invitationCode });
 

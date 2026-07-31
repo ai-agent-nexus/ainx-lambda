@@ -1,11 +1,13 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { DynamoDB } from 'aws-sdk';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import { Logger } from '@ainx/logger';
 import { formatResponse } from '@ainx/shared-utils';
 import { ConnectionStatus } from '@ainx/connection-utils';
 
 const logger = new Logger('remove-connection');
-const dynamodb = new DynamoDB.DocumentClient();
+const client = new DynamoDBClient({});
+const dynamodb = DynamoDBDocumentClient.from(client);
 const CONNECTIONS_TABLE_NAME = process.env.CONNECTIONS_TABLE_NAME!;
 
 if (!CONNECTIONS_TABLE_NAME) {
@@ -38,15 +40,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       });
     }
 
-    const connectionResult = await dynamodb
-      .get({
-        TableName: CONNECTIONS_TABLE_NAME,
-        Key: {
-          userId,
-          connectionId,
-        },
-      })
-      .promise();
+    const connectionResult = await dynamodb.get({
+      TableName: CONNECTIONS_TABLE_NAME,
+      Key: {
+        userId,
+        connectionId,
+      },
+    });
 
     if (!connectionResult.Item) {
       logger.warn('Connection not found', { userId, connectionId });
@@ -70,46 +70,44 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     const now = new Date().toISOString();
 
-    await dynamodb
-      .transactWrite({
-        TransactItems: [
-          {
-            Update: {
-              TableName: CONNECTIONS_TABLE_NAME,
-              Key: {
-                userId,
-                connectionId,
-              },
-              UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
-              ExpressionAttributeNames: {
-                '#status': 'status',
-              },
-              ExpressionAttributeValues: {
-                ':status': ConnectionStatus.DISCONNECTED,
-                ':updatedAt': now,
-              },
+    await dynamodb.transactWrite({
+      TransactItems: [
+        {
+          Update: {
+            TableName: CONNECTIONS_TABLE_NAME,
+            Key: {
+              userId,
+              connectionId,
+            },
+            UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
+            ExpressionAttributeNames: {
+              '#status': 'status',
+            },
+            ExpressionAttributeValues: {
+              ':status': ConnectionStatus.DISCONNECTED,
+              ':updatedAt': now,
             },
           },
-          {
-            Update: {
-              TableName: CONNECTIONS_TABLE_NAME,
-              Key: {
-                userId: connectionId,
-                connectionId: userId,
-              },
-              UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
-              ExpressionAttributeNames: {
-                '#status': 'status',
-              },
-              ExpressionAttributeValues: {
-                ':status': ConnectionStatus.DISCONNECTED,
-                ':updatedAt': now,
-              },
+        },
+        {
+          Update: {
+            TableName: CONNECTIONS_TABLE_NAME,
+            Key: {
+              userId: connectionId,
+              connectionId: userId,
+            },
+            UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
+            ExpressionAttributeNames: {
+              '#status': 'status',
+            },
+            ExpressionAttributeValues: {
+              ':status': ConnectionStatus.DISCONNECTED,
+              ':updatedAt': now,
             },
           },
-        ],
-      })
-      .promise();
+        },
+      ],
+    });
 
     logger.info('Connection removed', { userId, connectionId });
 

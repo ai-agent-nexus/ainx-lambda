@@ -1,11 +1,13 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { DynamoDB } from 'aws-sdk';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient, PutCommand } from '@aws-sdk/lib-dynamodb';
 import { Logger } from '@ainx/logger';
 import { formatResponse, parseBody, validateInput } from '@ainx/shared-utils';
 import { parseDidKey } from '@ainx/did-utils';
 
 const logger = new Logger('auth-challenge');
-const dynamodb = new DynamoDB.DocumentClient();
+const client = new DynamoDBClient({});
+const dynamodb = DynamoDBDocumentClient.from(client);
 const CHALLENGE_TABLE_NAME = process.env.CHALLENGE_TABLE_NAME!;
 
 if (!CHALLENGE_TABLE_NAME) {
@@ -76,8 +78,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     // Store challenge in DynamoDB with TTL
     try {
-      await dynamodb
-        .put({
+      await dynamodb.send(
+        new PutCommand({
           TableName: CHALLENGE_TABLE_NAME,
           Item: {
             did,
@@ -86,7 +88,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             ttl,
           },
         })
-        .promise();
+      );
     } catch (err) {
       logger.error('Error storing challenge', { error: (err as Error).message, did });
       return formatResponse(500, {

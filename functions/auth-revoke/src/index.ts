@@ -1,11 +1,13 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
-import { DynamoDB } from 'aws-sdk';
+import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
 import jwt from 'jsonwebtoken';
 import { Logger } from '@ainx/logger';
 import { formatResponse, parseBody } from '@ainx/shared-utils';
 
 const logger = new Logger('auth-revoke');
-const dynamodb = new DynamoDB.DocumentClient();
+const client = new DynamoDBClient({});
+const dynamodb = DynamoDBDocumentClient.from(client);
 
 const REFRESH_TOKEN_TABLE_NAME = process.env.REFRESH_TOKEN_TABLE_NAME!;
 const TOKEN_BLACKLIST_TABLE_NAME = process.env.TOKEN_BLACKLIST_TABLE_NAME!;
@@ -95,18 +97,16 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       const now = new Date();
       const ttl = Math.floor(now.getTime() / 1000) + BLACKLIST_TTL_SECONDS;
 
-      await dynamodb
-        .put({
-          TableName: TOKEN_BLACKLIST_TABLE_NAME,
-          Item: {
-            jti,
-            did,
-            userId,
-            revokedAt: now.toISOString(),
-            ttl,
-          },
-        })
-        .promise();
+      await dynamodb.put({
+        TableName: TOKEN_BLACKLIST_TABLE_NAME,
+        Item: {
+          jti,
+          did,
+          userId,
+          revokedAt: now.toISOString(),
+          ttl,
+        },
+      });
     } catch (err) {
       logger.error('Error adding token to blacklist', { error: (err as Error).message, jti });
       return formatResponse(500, {
@@ -119,12 +119,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const body = parseBody<RevokeRequest>(event.body);
     if (body && body.refresh_token) {
       try {
-        await dynamodb
-          .delete({
-            TableName: REFRESH_TOKEN_TABLE_NAME,
-            Key: { token: body.refresh_token },
-          })
-          .promise();
+        await dynamodb.delete({
+          TableName: REFRESH_TOKEN_TABLE_NAME,
+          Key: { token: body.refresh_token },
+        });
 
         logger.info('Refresh token deleted', {
           refresh_token: body.refresh_token.substring(0, 10) + '...',
