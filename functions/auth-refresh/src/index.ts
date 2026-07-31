@@ -1,6 +1,11 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, QueryCommand, TransactWriteCommand } from '@aws-sdk/lib-dynamodb';
+import {
+  DynamoDBDocumentClient,
+  GetCommand,
+  QueryCommand,
+  TransactWriteCommand,
+} from '@aws-sdk/lib-dynamodb';
 import jwt from 'jsonwebtoken';
 import { Logger } from '@ainx/logger';
 import { formatResponse, parseBody, validateInput } from '@ainx/shared-utils';
@@ -75,10 +80,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     // Verify refresh token exists and is valid
     let refreshTokenData: Record<string, unknown> | undefined;
     try {
-      const tokenResult = await dynamodb.send(new GetCommand({
-        TableName: REFRESH_TOKEN_TABLE_NAME,
-        Key: { token: refresh_token },
-      }));
+      const tokenResult = await dynamodb.send(
+        new GetCommand({
+          TableName: REFRESH_TOKEN_TABLE_NAME,
+          Key: { token: refresh_token },
+        })
+      );
 
       if (!tokenResult.Item) {
         logger.warn('Refresh token not found', {
@@ -127,19 +134,21 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     // Verify DID is still active
     try {
-      const didResult = await dynamodb.send(new QueryCommand({
-        TableName: AGENT_REGISTRATION_TABLE_NAME,
-        IndexName: 'DidIndex',
-        KeyConditionExpression: 'did = :did',
-        FilterExpression: '#status = :status',
-        ExpressionAttributeNames: {
-          '#status': 'status',
-        },
-        ExpressionAttributeValues: {
-          ':did': did,
-          ':status': 'active',
-        },
-      }));
+      const didResult = await dynamodb.send(
+        new QueryCommand({
+          TableName: AGENT_REGISTRATION_TABLE_NAME,
+          IndexName: 'DidIndex',
+          KeyConditionExpression: 'did = :did',
+          FilterExpression: '#status = :status',
+          ExpressionAttributeNames: {
+            '#status': 'status',
+          },
+          ExpressionAttributeValues: {
+            ':did': did,
+            ':status': 'active',
+          },
+        })
+      );
 
       if (!didResult.Items || didResult.Items.length === 0) {
         logger.warn('DID not active', { did });
@@ -191,30 +200,32 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     // Store new refresh token and delete old one (transaction)
     try {
-      await dynamodb.send(new TransactWriteCommand({
-        TransactItems: [
-          {
-            Put: {
-              TableName: REFRESH_TOKEN_TABLE_NAME,
-              Item: {
-                token: newRefreshToken,
-                userId,
-                did,
-                createdAt: new Date().toISOString(),
-                expiresAt: refreshTokenExpiresAt.toISOString(),
-                ttl: refreshTokenTtl,
-                isRevoked: false,
+      await dynamodb.send(
+        new TransactWriteCommand({
+          TransactItems: [
+            {
+              Put: {
+                TableName: REFRESH_TOKEN_TABLE_NAME,
+                Item: {
+                  token: newRefreshToken,
+                  userId,
+                  did,
+                  createdAt: new Date().toISOString(),
+                  expiresAt: refreshTokenExpiresAt.toISOString(),
+                  ttl: refreshTokenTtl,
+                  isRevoked: false,
+                },
               },
             },
-          },
-          {
-            Delete: {
-              TableName: REFRESH_TOKEN_TABLE_NAME,
-              Key: { token: refresh_token },
+            {
+              Delete: {
+                TableName: REFRESH_TOKEN_TABLE_NAME,
+                Key: { token: refresh_token },
+              },
             },
-          },
-        ],
-      }));
+          ],
+        })
+      );
     } catch (err) {
       logger.error('Error updating refresh token', { error: (err as Error).message });
       return formatResponse(500, {

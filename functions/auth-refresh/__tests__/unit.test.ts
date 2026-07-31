@@ -72,7 +72,7 @@ describe('auth-refresh handler', () => {
     process.env.REFRESH_TOKEN_TABLE_NAME = 'test-refresh-token-table';
     process.env.AGENT_REGISTRATION_TABLE_NAME = 'test-agent-registration-table';
     process.env.JWT_PRIVATE_KEY = 'test-private-key';
-    
+
     // Default mockSend returns empty object
     mockSend.mockResolvedValue({});
   });

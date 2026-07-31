@@ -93,7 +93,7 @@ describe('auth-token handler', () => {
     process.env.CHALLENGE_TABLE_NAME = 'test-challenge-table';
     process.env.REFRESH_TOKEN_TABLE_NAME = 'test-refresh-token-table';
     process.env.JWT_PRIVATE_KEY = 'test-private-key';
-    
+
     mockSend.mockResolvedValue({});
   });
 
@@ -114,11 +114,13 @@ describe('auth-token handler', () => {
         })
         .mockResolvedValueOnce({}) // delete challenge
         .mockResolvedValueOnce({
-          Items: [{
-            userId: 'test-user-id',
-            did: validBody.did,
-            status: 'active',
-          }],
+          Items: [
+            {
+              userId: 'test-user-id',
+              did: validBody.did,
+              status: 'active',
+            },
+          ],
         })
         .mockResolvedValueOnce({}); // store refresh token
 

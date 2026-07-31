@@ -40,13 +40,15 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       });
     }
 
-    const connectionResult = await dynamodb.send(new GetCommand({
-      TableName: CONNECTIONS_TABLE_NAME,
-      Key: {
-        userId,
-        connectionId,
-      },
-    }));
+    const connectionResult = await dynamodb.send(
+      new GetCommand({
+        TableName: CONNECTIONS_TABLE_NAME,
+        Key: {
+          userId,
+          connectionId,
+        },
+      })
+    );
 
     if (!connectionResult.Item) {
       logger.warn('Connection not found', { userId, connectionId });
@@ -70,44 +72,46 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     const now = new Date().toISOString();
 
-    await dynamodb.send(new TransactWriteCommand({
-      TransactItems: [
-        {
-          Update: {
-            TableName: CONNECTIONS_TABLE_NAME,
-            Key: {
-              userId,
-              connectionId,
-            },
-            UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
-            ExpressionAttributeNames: {
-              '#status': 'status',
-            },
-            ExpressionAttributeValues: {
-              ':status': ConnectionStatus.DISCONNECTED,
-              ':updatedAt': now,
-            },
-          },
-        },
-        {
-          Update: {
-            TableName: CONNECTIONS_TABLE_NAME,
-            Key: {
-              userId: connectionId,
-              connectionId: userId,
-            },
-            UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
-            ExpressionAttributeNames: {
-              '#status': 'status',
-            },
-            ExpressionAttributeValues: {
-              ':status': ConnectionStatus.DISCONNECTED,
-              ':updatedAt': now,
+    await dynamodb.send(
+      new TransactWriteCommand({
+        TransactItems: [
+          {
+            Update: {
+              TableName: CONNECTIONS_TABLE_NAME,
+              Key: {
+                userId,
+                connectionId,
+              },
+              UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
+              ExpressionAttributeNames: {
+                '#status': 'status',
+              },
+              ExpressionAttributeValues: {
+                ':status': ConnectionStatus.DISCONNECTED,
+                ':updatedAt': now,
+              },
             },
           },
-        },
-      ],
-    }));
+          {
+            Update: {
+              TableName: CONNECTIONS_TABLE_NAME,
+              Key: {
+                userId: connectionId,
+                connectionId: userId,
+              },
+              UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
+              ExpressionAttributeNames: {
+                '#status': 'status',
+              },
+              ExpressionAttributeValues: {
+                ':status': ConnectionStatus.DISCONNECTED,
+                ':updatedAt': now,
+              },
+            },
+          },
+        ],
+      })
+    );
 
     logger.info('Connection removed', { userId, connectionId });
 

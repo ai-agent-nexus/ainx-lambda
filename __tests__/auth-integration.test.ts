@@ -87,80 +87,6 @@ const dynamoDBState = {
   tokenBlacklist: new Map<string, unknown>(),
 };
 
-const mockPutFn = jest.fn((params: { TableName: string; Item: Record<string, unknown> }) => ({
-  promise: jest.fn().mockImplementation(() => {
-    const { TableName, Item } = params;
-    if (TableName.includes('challenge')) {
-      dynamoDBState.challenges.set(Item.did as string, Item);
-    } else if (TableName.includes('agent-registration')) {
-      dynamoDBState.agents.set(Item.did as string, Item);
-    } else if (TableName.includes('refresh-token')) {
-      dynamoDBState.refreshTokens.set(Item.token as string, Item);
-    } else if (TableName.includes('token-blacklist')) {
-      dynamoDBState.tokenBlacklist.set(Item.jti as string, Item);
-    }
-    return Promise.resolve({});
-  }),
-}));
-
-const mockGetFn = jest.fn((params: { TableName: string; Key: Record<string, unknown> }) => {
-  const { TableName, Key } = params;
-  if (TableName.includes('challenge')) {
-    const did = Key.did as string;
-    const item = dynamoDBState.challenges.get(did);
-    return {
-      promise: jest.fn().mockResolvedValue({ Item: item }),
-    };
-  } else if (TableName.includes('refresh-token')) {
-    const token = Key.token as string;
-    const item = dynamoDBState.refreshTokens.get(token);
-    return {
-      promise: jest.fn().mockResolvedValue({ Item: item }),
-    };
-  }
-  return {
-    promise: jest.fn().mockResolvedValue({ Item: undefined }),
-  };
-});
-
-const mockQueryFn = jest.fn(
-  (params: { TableName: string; ExpressionAttributeValues: Record<string, unknown> }) => {
-    const { TableName, ExpressionAttributeValues } = params;
-    if (TableName.includes('agent-registration')) {
-      const did = ExpressionAttributeValues[':did'] as string;
-      const items: Array<Record<string, unknown>> = [];
-      for (const [, item] of dynamoDBState.agents) {
-        const agentItem = item as Record<string, unknown>;
-        if (agentItem.did === did && agentItem.status === 'active') {
-          items.push(agentItem);
-        }
-      }
-      return {
-        promise: jest.fn().mockResolvedValue({ Items: items }),
-      };
-    }
-    return {
-      promise: jest.fn().mockResolvedValue({ Items: [] }),
-    };
-  }
-);
-
-const mockDeleteFn = jest.fn((params: { TableName: string; Key: Record<string, unknown> }) => {
-  const { TableName, Key } = params;
-  if (TableName.includes('challenge')) {
-    dynamoDBState.challenges.delete(Key.did as string);
-  } else if (TableName.includes('refresh-token')) {
-    dynamoDBState.refreshTokens.delete(Key.token as string);
-  }
-  return {
-    promise: jest.fn().mockResolvedValue({}),
-  };
-});
-
-const mockTransactWriteFn = jest.fn(() => ({
-  promise: jest.fn().mockResolvedValue({}),
-}));
-
 // Mock the DynamoDB client - use a single mockSend that can be controlled
 const mockSend = jest.fn();
 jest.mock('@aws-sdk/client-dynamodb', () => ({
@@ -634,9 +560,7 @@ F8PbnGy0AHB7MhgwMbRvI0MBZhpIA7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j
 
   describe('Error scenarios', () => {
     it('should handle DynamoDB errors in challenge handler', async () => {
-      mockPutFn.mockImplementationOnce(() => ({
-        promise: jest.fn().mockRejectedValue(new Error('DynamoDB Error')),
-      }));
+      mockSend.mockRejectedValueOnce(new Error('DynamoDB Error'));
 
       const challengeEvent: Partial<APIGatewayProxyEvent> = {
         path: '/auth/challenge',
@@ -668,9 +592,7 @@ F8PbnGy0AHB7MhgwMbRvI0MBZhpIA7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j
         ttl: Math.floor(Date.now() / 1000) + 300,
       });
 
-      mockQueryFn.mockImplementationOnce(() => ({
-        promise: jest.fn().mockRejectedValue(new Error('DynamoDB Error')),
-      }));
+      mockSend.mockRejectedValueOnce(new Error('DynamoDB Error'));
 
       const tokenEvent: Partial<APIGatewayProxyEvent> = {
         path: '/auth/token',

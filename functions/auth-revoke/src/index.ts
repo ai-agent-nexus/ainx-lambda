@@ -97,16 +97,18 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       const now = new Date();
       const ttl = Math.floor(now.getTime() / 1000) + BLACKLIST_TTL_SECONDS;
 
-      await dynamodb.send(new PutCommand({
-        TableName: TOKEN_BLACKLIST_TABLE_NAME,
-        Item: {
-          jti,
-          did,
-          userId,
-          revokedAt: now.toISOString(),
-          ttl,
-        },
-      }));
+      await dynamodb.send(
+        new PutCommand({
+          TableName: TOKEN_BLACKLIST_TABLE_NAME,
+          Item: {
+            jti,
+            did,
+            userId,
+            revokedAt: now.toISOString(),
+            ttl,
+          },
+        })
+      );
     } catch (err) {
       logger.error('Error adding token to blacklist', { error: (err as Error).message, jti });
       return formatResponse(500, {
@@ -119,10 +121,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const body = parseBody<RevokeRequest>(event.body);
     if (body && body.refresh_token) {
       try {
-        await dynamodb.send(new DeleteCommand({
-          TableName: REFRESH_TOKEN_TABLE_NAME,
-          Key: { token: body.refresh_token },
-        }));
+        await dynamodb.send(
+          new DeleteCommand({
+            TableName: REFRESH_TOKEN_TABLE_NAME,
+            Key: { token: body.refresh_token },
+          })
+        );
 
         logger.info('Refresh token deleted', {
           refresh_token: body.refresh_token.substring(0, 10) + '...',

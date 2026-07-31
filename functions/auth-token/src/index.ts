@@ -1,6 +1,12 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, DeleteCommand, QueryCommand, PutCommand } from '@aws-sdk/lib-dynamodb';
+import {
+  DynamoDBDocumentClient,
+  GetCommand,
+  DeleteCommand,
+  QueryCommand,
+  PutCommand,
+} from '@aws-sdk/lib-dynamodb';
 import jwt from 'jsonwebtoken';
 import { Logger } from '@ainx/logger';
 import { formatResponse, parseBody, validateInput } from '@ainx/shared-utils';
@@ -121,18 +127,22 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     // Verify challenge exists and is valid
     let challengeValid = false;
     try {
-      const challengeResult = await dynamodb.send(new GetCommand({
-        TableName: CHALLENGE_TABLE_NAME,
-        Key: { did },
-      }));
+      const challengeResult = await dynamodb.send(
+        new GetCommand({
+          TableName: CHALLENGE_TABLE_NAME,
+          Key: { did },
+        })
+      );
 
       if (challengeResult.Item && challengeResult.Item.challenge === challenge) {
         challengeValid = true;
         // Delete challenge after use (one-time use)
-        await dynamodb.send(new DeleteCommand({
-          TableName: CHALLENGE_TABLE_NAME,
-          Key: { did },
-        }));
+        await dynamodb.send(
+          new DeleteCommand({
+            TableName: CHALLENGE_TABLE_NAME,
+            Key: { did },
+          })
+        );
       }
     } catch (err) {
       logger.error('Error verifying challenge', { error: (err as Error).message, did });
@@ -153,19 +163,21 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     // Verify DID exists and is active
     let userId: string;
     try {
-      const didResult = await dynamodb.send(new QueryCommand({
-        TableName: AGENT_REGISTRATION_TABLE_NAME,
-        IndexName: 'DidIndex',
-        KeyConditionExpression: 'did = :did',
-        FilterExpression: '#status = :status',
-        ExpressionAttributeNames: {
-          '#status': 'status',
-        },
-        ExpressionAttributeValues: {
-          ':did': did,
-          ':status': 'active',
-        },
-      }));
+      const didResult = await dynamodb.send(
+        new QueryCommand({
+          TableName: AGENT_REGISTRATION_TABLE_NAME,
+          IndexName: 'DidIndex',
+          KeyConditionExpression: 'did = :did',
+          FilterExpression: '#status = :status',
+          ExpressionAttributeNames: {
+            '#status': 'status',
+          },
+          ExpressionAttributeValues: {
+            ':did': did,
+            ':status': 'active',
+          },
+        })
+      );
 
       if (!didResult.Items || didResult.Items.length === 0) {
         logger.warn('DID not found', { did });
@@ -219,18 +231,20 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     // Store refresh token
     try {
-      await dynamodb.send(new PutCommand({
-        TableName: REFRESH_TOKEN_TABLE_NAME,
-        Item: {
-          token: refreshToken,
-          userId,
-          did,
-          createdAt: new Date().toISOString(),
-          expiresAt: refreshTokenExpiresAt.toISOString(),
-          ttl: refreshTokenTtl,
-          isRevoked: false,
-        },
-      }));
+      await dynamodb.send(
+        new PutCommand({
+          TableName: REFRESH_TOKEN_TABLE_NAME,
+          Item: {
+            token: refreshToken,
+            userId,
+            did,
+            createdAt: new Date().toISOString(),
+            expiresAt: refreshTokenExpiresAt.toISOString(),
+            ttl: refreshTokenTtl,
+            isRevoked: false,
+          },
+        })
+      );
     } catch (err) {
       logger.error('Error storing refresh token', { error: (err as Error).message });
       return formatResponse(500, {

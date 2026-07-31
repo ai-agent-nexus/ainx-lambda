@@ -40,10 +40,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       });
     }
 
-    const requestResult = await dynamodb.send(new GetCommand({
-      TableName: CONNECTION_REQUESTS_TABLE_NAME,
-      Key: { requestId },
-    }));
+    const requestResult = await dynamodb.send(
+      new GetCommand({
+        TableName: CONNECTION_REQUESTS_TABLE_NAME,
+        Key: { requestId },
+      })
+    );
 
     if (!requestResult.Item) {
       logger.warn('Request not found', { requestId });
@@ -73,18 +75,20 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     const now = new Date().toISOString();
 
-    await dynamodb.send(new UpdateCommand({
-      TableName: CONNECTION_REQUESTS_TABLE_NAME,
-      Key: { requestId },
-      UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
-      ExpressionAttributeNames: {
-        '#status': 'status',
-      },
-      ExpressionAttributeValues: {
-        ':status': ConnectionRequestStatus.REJECTED,
-        ':updatedAt': now,
-      },
-    }));
+    await dynamodb.send(
+      new UpdateCommand({
+        TableName: CONNECTION_REQUESTS_TABLE_NAME,
+        Key: { requestId },
+        UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
+        ExpressionAttributeNames: {
+          '#status': 'status',
+        },
+        ExpressionAttributeValues: {
+          ':status': ConnectionRequestStatus.REJECTED,
+          ':updatedAt': now,
+        },
+      })
+    );
 
     logger.info('Connection request rejected', { requestId, fromDid: request.fromDid, toDid });
 

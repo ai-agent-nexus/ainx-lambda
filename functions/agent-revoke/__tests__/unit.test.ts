@@ -78,7 +78,7 @@ describe('agent-revoke handler', () => {
     process.env.DID_UNIQUENESS_TABLE_NAME = 'test-did-uniqueness-table';
     process.env.REFRESH_TOKEN_TABLE_NAME = 'test-refresh-token-table';
     process.env.JWT_PUBLIC_KEY = 'test-public-key';
-    
+
     mockSend.mockResolvedValue({});
   });
 

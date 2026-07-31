@@ -90,13 +90,15 @@ describe('agent-rotate-key handler', () => {
     process.env.AGENT_REGISTRATION_TABLE_NAME = 'test-table';
     process.env.DID_UNIQUENESS_TABLE_NAME = 'test-did-uniqueness';
     process.env.NONCE_TABLE_NAME = 'test-nonce-table';
-    
+
     mockSend.mockResolvedValue({
-      Items: [{
-        userId: 'test-user-id',
-        did: validBody.oldDid,
-        status: 'active',
-      }],
+      Items: [
+        {
+          userId: 'test-user-id',
+          did: validBody.oldDid,
+          status: 'active',
+        },
+      ],
     });
   });
 
@@ -167,11 +169,13 @@ describe('agent-rotate-key handler', () => {
 
     it('should return 400 for invalid new DID format', async () => {
       mockSend.mockResolvedValueOnce({
-        Items: [{
-          userId: 'test-user-id',
-          did: validBody.oldDid,
-          status: 'active',
-        }],
+        Items: [
+          {
+            userId: 'test-user-id',
+            did: validBody.oldDid,
+            status: 'active',
+          },
+        ],
       });
 
       mockEvent.body = JSON.stringify({

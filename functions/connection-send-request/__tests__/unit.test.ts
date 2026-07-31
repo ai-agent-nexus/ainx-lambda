@@ -62,7 +62,6 @@ jest.mock('@ainx/connection-utils', () => ({
 }));
 
 // Mock the DynamoDB client - use a single mockSend that can be controlled
-const mockSend = jest.fn();
 jest.mock('@aws-sdk/client-dynamodb', () => ({
   DynamoDBClient: jest.fn(() => ({})),
 }));

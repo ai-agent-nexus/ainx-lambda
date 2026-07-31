@@ -34,8 +34,6 @@ module.exports = {
     '^@ainx/crypto-utils$': path.resolve(__dirname, 'packages/crypto-utils/src/index.ts'),
     '^@ainx/did-utils$': path.resolve(__dirname, 'packages/did-utils/src/index.ts'),
   },
-  transformIgnorePatterns: [
-    'node_modules/(?!(uuid)/)',
-  ],
+  transformIgnorePatterns: ['node_modules/(?!(uuid)/)'],
   extensionsToTreatAsEsm: ['.ts'],
 };

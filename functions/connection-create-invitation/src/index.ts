@@ -75,16 +75,18 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const invitationCode = generateInvitationCode();
     const { expiresAt, ttl } = calculateInvitationExpiration(expiresInSeconds);
 
-    await dynamodb.send(new PutCommand({
-      TableName: INVITATIONS_TABLE_NAME,
-      Item: {
-        invitationCode,
-        creatorDid,
-        expiresAt,
-        createdAt: new Date().toISOString(),
-        ttl,
-      },
-    }));
+    await dynamodb.send(
+      new PutCommand({
+        TableName: INVITATIONS_TABLE_NAME,
+        Item: {
+          invitationCode,
+          creatorDid,
+          expiresAt,
+          createdAt: new Date().toISOString(),
+          ttl,
+        },
+      })
+    );
 
     logger.info('Invitation created successfully', { invitationCode, creatorDid, expiresAt });
 

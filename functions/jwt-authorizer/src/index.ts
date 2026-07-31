@@ -79,10 +79,12 @@ export const handler = async (
 
     // Check if token is blacklisted
     try {
-      const blacklistResult = await dynamodb.send(new GetCommand({
-        TableName: TOKEN_BLACKLIST_TABLE_NAME,
-        Key: { jti },
-      }));
+      const blacklistResult = await dynamodb.send(
+        new GetCommand({
+          TableName: TOKEN_BLACKLIST_TABLE_NAME,
+          Key: { jti },
+        })
+      );
 
       if (blacklistResult.Item) {
         logger.warn('Token is blacklisted', { jti });

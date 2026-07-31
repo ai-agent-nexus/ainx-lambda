@@ -60,7 +60,7 @@ describe('jwt-authorizer handler', () => {
     };
     process.env.TOKEN_BLACKLIST_TABLE_NAME = 'test-token-blacklist-table';
     process.env.JWT_PUBLIC_KEY = 'test-public-key';
-    
+
     mockSend.mockResolvedValue({});
   });
 

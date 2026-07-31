@@ -76,12 +76,14 @@ describe('accept-request handler', () => {
 
   describe('Routing', () => {
     it('should handle POST /connections/requests/{id}/accept', async () => {
-      mockSend.mockResolvedValueOnce({ Item: {
-            requestId: 'req_test123',
-            fromDid: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ_sender',
-            toDid: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
-            status: 'PENDING',
-          } });
+      mockSend.mockResolvedValueOnce({
+        Item: {
+          requestId: 'req_test123',
+          fromDid: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ_sender',
+          toDid: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
+          status: 'PENDING',
+        },
+      });
 
       mockSend.mockResolvedValueOnce({ Count: 0 });
 
@@ -115,12 +117,14 @@ describe('accept-request handler', () => {
     });
 
     it('should return 403 for non-target user', async () => {
-      mockSend.mockResolvedValueOnce({ Item: {
-            requestId: 'req_test123',
-            fromDid: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ_sender',
-            toDid: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ_other',
-            status: 'PENDING',
-          } });
+      mockSend.mockResolvedValueOnce({
+        Item: {
+          requestId: 'req_test123',
+          fromDid: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ_sender',
+          toDid: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ_other',
+          status: 'PENDING',
+        },
+      });
 
       const result = await handler(mockEvent as APIGatewayProxyEvent);
 
@@ -130,12 +134,14 @@ describe('accept-request handler', () => {
     });
 
     it('should return 409 for non-pending request', async () => {
-      mockSend.mockResolvedValueOnce({ Item: {
-            requestId: 'req_test123',
-            fromDid: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ_sender',
-            toDid: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
-            status: 'ACCEPTED',
-          } });
+      mockSend.mockResolvedValueOnce({
+        Item: {
+          requestId: 'req_test123',
+          fromDid: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ_sender',
+          toDid: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
+          status: 'ACCEPTED',
+        },
+      });
 
       const result = await handler(mockEvent as APIGatewayProxyEvent);
 
@@ -147,12 +153,14 @@ describe('accept-request handler', () => {
 
   describe('Connection limit', () => {
     it('should return 429 when connection limit reached', async () => {
-      mockSend.mockResolvedValueOnce({ Item: {
-            requestId: 'req_test123',
-            fromDid: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ_sender',
-            toDid: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
-            status: 'PENDING',
-          } });
+      mockSend.mockResolvedValueOnce({
+        Item: {
+          requestId: 'req_test123',
+          fromDid: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ_sender',
+          toDid: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',
+          status: 'PENDING',
+        },
+      });
 
       mockSend.mockResolvedValueOnce({ Count: 100 });
 
