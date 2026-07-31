@@ -113,10 +113,10 @@ describe('E2E: Connection Management', () => {
     const receiver = generateValidDid();
     await registerAgent(sender.did, sender.signMessage);
     await registerAgent(receiver.did, receiver.signMessage);
-    
+
     // Wait a bit to ensure agent registration is propagated
-    await new Promise(resolve => setTimeout(resolve, 500));
-    
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
     const senderToken = await getJwtToken(sender.did, sender.signMessage);
     const receiverToken = await getJwtToken(receiver.did, receiver.signMessage);
 
@@ -195,7 +195,6 @@ describe('E2E: Connection Management', () => {
     await cleanupTestData();
   }, 120000);
 
-
   afterAll(async () => {
     await cleanupTestData();
   }, 120000);
@@ -222,7 +221,7 @@ describe('E2E: Connection Management', () => {
     });
 
     it('should send a connection request', async () => {
-      const { sender, receiver, senderToken } = await createTestContext();
+      const { receiver, senderToken } = await createTestContext();
 
       // Create invitation
       const inviteResponse = await axios.post(
@@ -260,7 +259,7 @@ describe('E2E: Connection Management', () => {
     });
 
     it('should accept a connection request', async () => {
-      const { sender, receiver, senderToken, receiverToken } = await createTestContext();
+      const { receiver, senderToken, receiverToken } = await createTestContext();
 
       // Create invitation
       const inviteResponse = await axios.post(
@@ -313,7 +312,7 @@ describe('E2E: Connection Management', () => {
     });
 
     it('should list connections for sender', async () => {
-      const { sender, receiver, senderToken, receiverToken } = await createTestContext();
+      const { receiver, senderToken, receiverToken } = await createTestContext();
 
       // Create invitation
       const inviteResponse = await axios.post(
@@ -434,7 +433,7 @@ describe('E2E: Connection Management', () => {
     });
 
     it('should remove a connection', async () => {
-      const { sender, receiver, senderToken, receiverToken } = await createTestContext();
+      const { receiver, senderToken, receiverToken } = await createTestContext();
 
       // Create invitation
       const inviteResponse = await axios.post(
@@ -492,7 +491,7 @@ describe('E2E: Connection Management', () => {
     });
 
     it('should show empty connections after removal', async () => {
-      const { sender, receiver, senderToken, receiverToken } = await createTestContext();
+      const { receiver, senderToken, receiverToken } = await createTestContext();
 
       // Create invitation
       const inviteResponse = await axios.post(
@@ -599,7 +598,7 @@ describe('E2E: Connection Management', () => {
     });
 
     it('should reject duplicate request', async () => {
-      const { sender, receiver, senderToken } = await createTestContext();
+      const { receiver, senderToken } = await createTestContext();
 
       const createResponse = await axios.post(
         INVITATIONS_URL,
@@ -655,7 +654,7 @@ describe('E2E: Connection Management', () => {
     });
 
     it('should reject non-target user accepting request', async () => {
-      const { sender, receiver, senderToken, receiverToken } = await createTestContext();
+      const { receiver, senderToken } = await createTestContext();
       const other = generateValidDid();
       await registerAgent(other.did, other.signMessage);
       const otherToken = await getJwtToken(other.did, other.signMessage);
@@ -711,7 +710,7 @@ describe('E2E: Connection Management', () => {
     });
 
     it('should reject expired invitation', async () => {
-      const { sender, receiver, senderToken } = await createTestContext();
+      const { receiver, senderToken } = await createTestContext();
 
       const createResponse = await axios.post(
         INVITATIONS_URL,
@@ -753,7 +752,7 @@ describe('E2E: Connection Management', () => {
     });
 
     it('should reject invalid invitation code', async () => {
-      const { sender, receiver, senderToken } = await createTestContext();
+      const { receiver, senderToken } = await createTestContext();
 
       try {
         await axios.post(
@@ -778,7 +777,7 @@ describe('E2E: Connection Management', () => {
     });
 
     it('should reject missing required fields', async () => {
-      const { sender, receiver, senderToken } = await createTestContext();
+      const { receiver, senderToken } = await createTestContext();
 
       try {
         await axios.post(
