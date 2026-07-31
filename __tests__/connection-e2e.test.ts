@@ -107,21 +107,21 @@ describe('E2E: Connection Management', () => {
     );
   };
 
-  let sender: { did: string; signMessage: (msg: string) => string };
-  let receiver: { did: string; signMessage: (msg: string) => string };
-  let senderToken: string;
-  let receiverToken: string;
-  let invitationCode: string;
-  let requestId: string;
-
-  beforeAll(async () => {
-    sender = generateValidDid();
-    receiver = generateValidDid();
+  // Helper to create a complete test context with sender, receiver, tokens, and invitation
+  const createTestContext = async () => {
+    const sender = generateValidDid();
+    const receiver = generateValidDid();
     await registerAgent(sender.did, sender.signMessage);
     await registerAgent(receiver.did, receiver.signMessage);
-    senderToken = await getJwtToken(sender.did, sender.signMessage);
-    receiverToken = await getJwtToken(receiver.did, receiver.signMessage);
-  });
+    
+    // Wait a bit to ensure agent registration is propagated
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    const senderToken = await getJwtToken(sender.did, sender.signMessage);
+    const receiverToken = await getJwtToken(receiver.did, receiver.signMessage);
+
+    return { sender, receiver, senderToken, receiverToken };
+  };
 
   const cleanupTestData = async () => {
     try {
@@ -190,12 +190,20 @@ describe('E2E: Connection Management', () => {
     }
   };
 
+  // Clean up before and after all tests
+  beforeAll(async () => {
+    await cleanupTestData();
+  }, 120000);
+
+
   afterAll(async () => {
     await cleanupTestData();
-  });
+  }, 120000);
 
   describe('Happy Path', () => {
     it('should create an invitation', async () => {
+      const { senderToken } = await createTestContext();
+
       const response = await axios.post(
         INVITATIONS_URL,
         {},
@@ -211,10 +219,27 @@ describe('E2E: Connection Management', () => {
       expect(response.status).toBe(201);
       expect(response.data.invitationCode).toBeDefined();
       expect(response.data.expiresAt).toBeDefined();
-      invitationCode = response.data.invitationCode;
     });
 
     it('should send a connection request', async () => {
+      const { sender, receiver, senderToken } = await createTestContext();
+
+      // Create invitation
+      const inviteResponse = await axios.post(
+        INVITATIONS_URL,
+        {},
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${senderToken}`,
+          },
+          timeout: 10000,
+        }
+      );
+
+      const invitationCode = inviteResponse.data.invitationCode;
+
+      // Send connection request
       const response = await axios.post(
         REQUESTS_URL,
         {
@@ -232,10 +257,45 @@ describe('E2E: Connection Management', () => {
 
       expect(response.status).toBe(201);
       expect(response.data.requestId).toBeDefined();
-      requestId = response.data.requestId;
     });
 
     it('should accept a connection request', async () => {
+      const { sender, receiver, senderToken, receiverToken } = await createTestContext();
+
+      // Create invitation
+      const inviteResponse = await axios.post(
+        INVITATIONS_URL,
+        {},
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${senderToken}`,
+          },
+          timeout: 10000,
+        }
+      );
+
+      const invitationCode = inviteResponse.data.invitationCode;
+
+      // Send connection request
+      const requestResponse = await axios.post(
+        REQUESTS_URL,
+        {
+          toDid: receiver.did,
+          invitationCode,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${senderToken}`,
+          },
+          timeout: 10000,
+        }
+      );
+
+      const requestId = requestResponse.data.requestId;
+
+      // Accept connection request
       const response = await axios.post(
         `${REQUESTS_URL}/${requestId}/accept`,
         {},
@@ -253,6 +313,52 @@ describe('E2E: Connection Management', () => {
     });
 
     it('should list connections for sender', async () => {
+      const { sender, receiver, senderToken, receiverToken } = await createTestContext();
+
+      // Create invitation
+      const inviteResponse = await axios.post(
+        INVITATIONS_URL,
+        {},
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${senderToken}`,
+          },
+          timeout: 10000,
+        }
+      );
+
+      const invitationCode = inviteResponse.data.invitationCode;
+
+      // Send and accept connection request
+      const requestResponse = await axios.post(
+        REQUESTS_URL,
+        {
+          toDid: receiver.did,
+          invitationCode,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${senderToken}`,
+          },
+          timeout: 10000,
+        }
+      );
+
+      await axios.post(
+        `${REQUESTS_URL}/${requestResponse.data.requestId}/accept`,
+        {},
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${receiverToken}`,
+          },
+          timeout: 10000,
+        }
+      );
+
+      // List connections
       const response = await axios.get(CONNECTIONS_URL, {
         headers: {
           Authorization: `Bearer ${senderToken}`,
@@ -268,6 +374,52 @@ describe('E2E: Connection Management', () => {
     });
 
     it('should list connections for receiver', async () => {
+      const { sender, receiver, senderToken, receiverToken } = await createTestContext();
+
+      // Create invitation
+      const inviteResponse = await axios.post(
+        INVITATIONS_URL,
+        {},
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${senderToken}`,
+          },
+          timeout: 10000,
+        }
+      );
+
+      const invitationCode = inviteResponse.data.invitationCode;
+
+      // Send and accept connection request
+      const requestResponse = await axios.post(
+        REQUESTS_URL,
+        {
+          toDid: receiver.did,
+          invitationCode,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${senderToken}`,
+          },
+          timeout: 10000,
+        }
+      );
+
+      await axios.post(
+        `${REQUESTS_URL}/${requestResponse.data.requestId}/accept`,
+        {},
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${receiverToken}`,
+          },
+          timeout: 10000,
+        }
+      );
+
+      // List connections for receiver
       const response = await axios.get(CONNECTIONS_URL, {
         headers: {
           Authorization: `Bearer ${receiverToken}`,
@@ -282,6 +434,52 @@ describe('E2E: Connection Management', () => {
     });
 
     it('should remove a connection', async () => {
+      const { sender, receiver, senderToken, receiverToken } = await createTestContext();
+
+      // Create invitation
+      const inviteResponse = await axios.post(
+        INVITATIONS_URL,
+        {},
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${senderToken}`,
+          },
+          timeout: 10000,
+        }
+      );
+
+      const invitationCode = inviteResponse.data.invitationCode;
+
+      // Send and accept connection request
+      const requestResponse = await axios.post(
+        REQUESTS_URL,
+        {
+          toDid: receiver.did,
+          invitationCode,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${senderToken}`,
+          },
+          timeout: 10000,
+        }
+      );
+
+      await axios.post(
+        `${REQUESTS_URL}/${requestResponse.data.requestId}/accept`,
+        {},
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${receiverToken}`,
+          },
+          timeout: 10000,
+        }
+      );
+
+      // Remove connection
       const response = await axios.delete(`${CONNECTIONS_URL}/${receiver.did}`, {
         headers: {
           Authorization: `Bearer ${senderToken}`,
@@ -294,6 +492,60 @@ describe('E2E: Connection Management', () => {
     });
 
     it('should show empty connections after removal', async () => {
+      const { sender, receiver, senderToken, receiverToken } = await createTestContext();
+
+      // Create invitation
+      const inviteResponse = await axios.post(
+        INVITATIONS_URL,
+        {},
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${senderToken}`,
+          },
+          timeout: 10000,
+        }
+      );
+
+      const invitationCode = inviteResponse.data.invitationCode;
+
+      // Send and accept connection request
+      const requestResponse = await axios.post(
+        REQUESTS_URL,
+        {
+          toDid: receiver.did,
+          invitationCode,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${senderToken}`,
+          },
+          timeout: 10000,
+        }
+      );
+
+      await axios.post(
+        `${REQUESTS_URL}/${requestResponse.data.requestId}/accept`,
+        {},
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${receiverToken}`,
+          },
+          timeout: 10000,
+        }
+      );
+
+      // Remove connection
+      await axios.delete(`${CONNECTIONS_URL}/${receiver.did}`, {
+        headers: {
+          Authorization: `Bearer ${senderToken}`,
+        },
+        timeout: 10000,
+      });
+
+      // List connections - should be empty
       const response = await axios.get(CONNECTIONS_URL, {
         headers: {
           Authorization: `Bearer ${senderToken}`,
@@ -308,6 +560,8 @@ describe('E2E: Connection Management', () => {
 
   describe('Error Cases', () => {
     it('should reject self-connection', async () => {
+      const { sender, senderToken } = await createTestContext();
+
       const createResponse = await axios.post(
         INVITATIONS_URL,
         {},
@@ -345,6 +599,8 @@ describe('E2E: Connection Management', () => {
     });
 
     it('should reject duplicate request', async () => {
+      const { sender, receiver, senderToken } = await createTestContext();
+
       const createResponse = await axios.post(
         INVITATIONS_URL,
         {},
@@ -399,10 +655,9 @@ describe('E2E: Connection Management', () => {
     });
 
     it('should reject non-target user accepting request', async () => {
+      const { sender, receiver, senderToken, receiverToken } = await createTestContext();
       const other = generateValidDid();
-      const otherReceiver = generateValidDid();
       await registerAgent(other.did, other.signMessage);
-      await registerAgent(otherReceiver.did, otherReceiver.signMessage);
       const otherToken = await getJwtToken(other.did, other.signMessage);
 
       const createResponse = await axios.post(
@@ -422,7 +677,7 @@ describe('E2E: Connection Management', () => {
       const sendResponse = await axios.post(
         REQUESTS_URL,
         {
-          toDid: otherReceiver.did,
+          toDid: receiver.did,
           invitationCode: code,
         },
         {
@@ -456,6 +711,8 @@ describe('E2E: Connection Management', () => {
     });
 
     it('should reject expired invitation', async () => {
+      const { sender, receiver, senderToken } = await createTestContext();
+
       const createResponse = await axios.post(
         INVITATIONS_URL,
         { expiresInSeconds: 1 },
@@ -496,6 +753,8 @@ describe('E2E: Connection Management', () => {
     });
 
     it('should reject invalid invitation code', async () => {
+      const { sender, receiver, senderToken } = await createTestContext();
+
       try {
         await axios.post(
           REQUESTS_URL,
@@ -519,6 +778,8 @@ describe('E2E: Connection Management', () => {
     });
 
     it('should reject missing required fields', async () => {
+      const { sender, receiver, senderToken } = await createTestContext();
+
       try {
         await axios.post(
           REQUESTS_URL,
@@ -561,6 +822,8 @@ describe('E2E: Connection Management', () => {
 
   describe('Pagination', () => {
     it('should handle limit parameter', async () => {
+      const { senderToken } = await createTestContext();
+
       const response = await axios.get(`${CONNECTIONS_URL}?limit=5`, {
         headers: {
           Authorization: `Bearer ${senderToken}`,
@@ -573,6 +836,8 @@ describe('E2E: Connection Management', () => {
     });
 
     it('should return nextToken when more results exist', async () => {
+      const { senderToken } = await createTestContext();
+
       const response = await axios.get(`${CONNECTIONS_URL}?limit=1`, {
         headers: {
           Authorization: `Bearer ${senderToken}`,
