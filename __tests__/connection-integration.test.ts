@@ -110,7 +110,7 @@ const getConnectionKey = (userId: string, connectionId: string) => `${userId}#${
 const deleteCommands = new WeakSet<object>();
 
 function markAsDelete(command: unknown): void {
-  if (typeof command === 'object' && command !== null) {
+  if (command !== null && typeof command === 'object') {
     deleteCommands.add(command);
   }
 }
@@ -137,7 +137,7 @@ const mockSend = jest.fn((command: unknown) => {
     }>;
   };
 
-  const isDelete = typeof command === 'object' && command !== null && deleteCommands.has(command);
+  const isDelete = command !== null && typeof command === 'object' && deleteCommands.has(command);
 
   if (cmd.TransactItems) {
     for (const item of cmd.TransactItems) {

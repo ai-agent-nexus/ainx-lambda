@@ -1,7 +1,7 @@
 import axios from 'axios';
 import crypto from 'crypto';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient } from '@aws-sdk/lib-dynamodb';
+import { DynamoDBDocumentClient, ScanCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
 
 /**
  * E2E Tests for Connection Management API
@@ -129,48 +129,60 @@ describe('E2E: Connection Management', () => {
     try {
       const deletePromises: Promise<unknown>[] = [];
 
-      const invitations = await dynamodb.scan({
-        TableName: INVITATIONS_TABLE_NAME,
-        ProjectionExpression: 'invitationCode',
-      });
+      const invitations = await dynamodb.send(
+        new ScanCommand({
+          TableName: INVITATIONS_TABLE_NAME,
+          ProjectionExpression: 'invitationCode',
+        })
+      );
 
       for (const item of invitations.Items || []) {
         deletePromises.push(
-          dynamodb.delete({
-            TableName: INVITATIONS_TABLE_NAME,
-            Key: { invitationCode: item.invitationCode },
-          })
+          dynamodb.send(
+            new DeleteCommand({
+              TableName: INVITATIONS_TABLE_NAME,
+              Key: { invitationCode: item.invitationCode },
+            })
+          )
         );
       }
 
-      const requests = await dynamodb.scan({
-        TableName: CONNECTION_REQUESTS_TABLE_NAME,
-        ProjectionExpression: 'requestId',
-      });
+      const requests = await dynamodb.send(
+        new ScanCommand({
+          TableName: CONNECTION_REQUESTS_TABLE_NAME,
+          ProjectionExpression: 'requestId',
+        })
+      );
 
       for (const item of requests.Items || []) {
         deletePromises.push(
-          dynamodb.delete({
-            TableName: CONNECTION_REQUESTS_TABLE_NAME,
-            Key: { requestId: item.requestId },
-          })
+          dynamodb.send(
+            new DeleteCommand({
+              TableName: CONNECTION_REQUESTS_TABLE_NAME,
+              Key: { requestId: item.requestId },
+            })
+          )
         );
       }
 
-      const connections = await dynamodb.scan({
-        TableName: CONNECTIONS_TABLE_NAME,
-        ProjectionExpression: 'userId,connectionId',
-      });
+      const connections = await dynamodb.send(
+        new ScanCommand({
+          TableName: CONNECTIONS_TABLE_NAME,
+          ProjectionExpression: 'userId,connectionId',
+        })
+      );
 
       for (const item of connections.Items || []) {
         deletePromises.push(
-          dynamodb.delete({
-            TableName: CONNECTIONS_TABLE_NAME,
-            Key: {
-              userId: item.userId,
-              connectionId: item.connectionId,
-            },
-          })
+          dynamodb.send(
+            new DeleteCommand({
+              TableName: CONNECTIONS_TABLE_NAME,
+              Key: {
+                userId: item.userId,
+                connectionId: item.connectionId,
+              },
+            })
+          )
         );
       }
 
