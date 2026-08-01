@@ -9,12 +9,21 @@ const logger = new Logger('connection-message-list');
 const client = new DynamoDBClient({});
 const dynamodb = DynamoDBDocumentClient.from(client);
 
-const CONNECTIONS_TABLE_NAME = process.env.CONNECTIONS_TABLE_NAME || '';
-const MESSAGES_TABLE_NAME = process.env.MESSAGES_TABLE_NAME || '';
+const getConnectionsTableName = () => {
+  const name = process.env.CONNECTIONS_TABLE_NAME;
+  if (!name) {
+    throw new Error('Required environment variable CONNECTIONS_TABLE_NAME is missing');
+  }
+  return name;
+};
 
-if (!CONNECTIONS_TABLE_NAME || !MESSAGES_TABLE_NAME) {
-  throw new Error('Required environment variables are missing');
-}
+const getMessagesTableName = () => {
+  const name = process.env.MESSAGES_TABLE_NAME;
+  if (!name) {
+    throw new Error('Required environment variable MESSAGES_TABLE_NAME is missing');
+  }
+  return name;
+};
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
@@ -43,10 +52,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       });
     }
 
+    const connectionsTableName = getConnectionsTableName();
+    const messagesTableName = getMessagesTableName();
+
     // Verify connection exists and user is part of it
     const connectionResult = await dynamodb.send(
       new GetCommand({
-        TableName: CONNECTIONS_TABLE_NAME,
+        TableName: connectionsTableName,
         Key: {
           userId: userDid,
           connectionId,
@@ -71,7 +83,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     // Query messages where user is receiver
     const queryParams: any = {
-      TableName: MESSAGES_TABLE_NAME,
+      TableName: messagesTableName,
       KeyConditionExpression: 'receiverDid = :receiverDid',
       ExpressionAttributeValues: {
         ':receiverDid': userDid,

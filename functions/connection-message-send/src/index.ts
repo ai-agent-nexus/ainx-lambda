@@ -19,12 +19,21 @@ const logger = new Logger('connection-message-send');
 const client = new DynamoDBClient({});
 const dynamodb = DynamoDBDocumentClient.from(client);
 
-const CONNECTIONS_TABLE_NAME = process.env.CONNECTIONS_TABLE_NAME || '';
-const MESSAGES_TABLE_NAME = process.env.MESSAGES_TABLE_NAME || '';
+const getConnectionsTableName = () => {
+  const name = process.env.CONNECTIONS_TABLE_NAME;
+  if (!name) {
+    throw new Error('Required environment variable CONNECTIONS_TABLE_NAME is missing');
+  }
+  return name;
+};
 
-if (!CONNECTIONS_TABLE_NAME || !MESSAGES_TABLE_NAME) {
-  throw new Error('Required environment variables are missing');
-}
+const getMessagesTableName = () => {
+  const name = process.env.MESSAGES_TABLE_NAME;
+  if (!name) {
+    throw new Error('Required environment variable MESSAGES_TABLE_NAME is missing');
+  }
+  return name;
+};
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   try {
@@ -74,10 +83,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       });
     }
 
+    const connectionsTableName = getConnectionsTableName();
+    const messagesTableName = getMessagesTableName();
+
     // Verify connection exists and sender is part of it
     const connectionResult = await dynamodb.send(
       new GetCommand({
-        TableName: CONNECTIONS_TABLE_NAME,
+        TableName: connectionsTableName,
         Key: {
           userId: senderDid,
           connectionId,
@@ -103,7 +115,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const idempotencyKey = event.headers['x-idempotency-key'] || generateIdempotencyKey();
     const existingMessage = await dynamodb.send(
       new QueryCommand({
-        TableName: MESSAGES_TABLE_NAME,
+        TableName: messagesTableName,
         KeyConditionExpression: 'receiverDid = :receiverDid',
         FilterExpression: 'messageIdempotencyKey = :idempotencyKey',
         ExpressionAttributeValues: {
@@ -129,7 +141,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     // Store message in DynamoDB
     await dynamodb.send(
       new PutCommand({
-        TableName: MESSAGES_TABLE_NAME,
+        TableName: messagesTableName,
         Item: {
           messageId,
           connectionId,
