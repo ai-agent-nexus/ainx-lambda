@@ -108,8 +108,9 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       });
     }
 
-    // Get receiver DID (the other party in the connection)
-    const receiverDid = connectionId; // connectionId is the other user's DID
+    const receiverDid = connectionId;
+    const sortedDids = [senderDid, receiverDid].sort();
+    const consistentConnectionId = `${sortedDids[0]}#${sortedDids[1]}`;
 
     // Check for duplicate (idempotency)
     const idempotencyKey = event.headers['x-idempotency-key'] || generateIdempotencyKey();
@@ -144,7 +145,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         TableName: messagesTableName,
         Item: {
           messageId,
-          connectionId,
+          connectionId: consistentConnectionId,
           senderDid,
           receiverDid,
           content,
