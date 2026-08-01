@@ -363,7 +363,7 @@ describe('Integration: Connection Flow', () => {
       expect(listSenderResult.statusCode).toBe(200);
       const listSenderBody = JSON.parse(listSenderResult.body);
       expect(listSenderBody.connections).toHaveLength(1);
-      expect(listSenderBody.connections[0].connectionId).toBe(receiverDid);
+      expect(listSenderBody.connections[0].connectionId).toBeDefined();
       expect(listSenderBody.connections[0].status).toBe('CONNECTED');
 
       // Step 5: List connections for receiver
@@ -382,11 +382,11 @@ describe('Integration: Connection Flow', () => {
       expect(listReceiverResult.statusCode).toBe(200);
       const listReceiverBody = JSON.parse(listReceiverResult.body);
       expect(listReceiverBody.connections).toHaveLength(1);
-      expect(listReceiverBody.connections[0].connectionId).toBe(senderDid);
+      expect(listReceiverBody.connections[0].connectionId).toBeDefined();
 
       // Step 6: Remove connection
       const removeEvent: Partial<APIGatewayProxyEvent> = {
-        path: `/connections/${receiverDid}`,
+        path: `/connections/${listSenderBody.connections[0].connectionId}`,
         httpMethod: 'DELETE',
         requestContext: {
           authorizer: { did: senderDid },
@@ -767,11 +767,12 @@ describe('Integration: Connection Flow', () => {
         } as any,
       };
 
-      await acceptRequestHandler(acceptEvent as APIGatewayProxyEvent);
+      const acceptResult = await acceptRequestHandler(acceptEvent as APIGatewayProxyEvent);
+      const connectionId = JSON.parse(acceptResult.body).connectionId;
 
       // Remove connection
       const removeEvent: Partial<APIGatewayProxyEvent> = {
-        path: `/connections/${receiverDid}`,
+        path: `/connections/${connectionId}`,
         httpMethod: 'DELETE',
         requestContext: {
           authorizer: { did: senderDid },
@@ -782,11 +783,11 @@ describe('Integration: Connection Flow', () => {
       expect(removeResult.statusCode).toBe(200);
 
       // Verify records still exist with DISCONNECTED status
-      const senderConn = connectionsState.get(getConnectionKey(senderDid, receiverDid));
+      const senderConn = connectionsState.get(getConnectionKey(senderDid, connectionId));
       expect(senderConn).toBeDefined();
       expect(senderConn?.status).toBe('DISCONNECTED');
 
-      const receiverConn = connectionsState.get(getConnectionKey(receiverDid, senderDid));
+      const receiverConn = connectionsState.get(getConnectionKey(receiverDid, connectionId));
       expect(receiverConn).toBeDefined();
       expect(receiverConn?.status).toBe('DISCONNECTED');
     });

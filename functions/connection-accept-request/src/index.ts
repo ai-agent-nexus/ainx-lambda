@@ -13,6 +13,7 @@ import {
   ConnectionStatus,
   ConnectionRequestStatus,
 } from '@ainx/connection-utils';
+import { randomUUID } from 'crypto';
 
 const logger = new Logger('accept-request');
 const client = new DynamoDBClient({});
@@ -109,6 +110,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     const now = new Date().toISOString();
     const ttl = Math.floor(Date.now() / 1000) + 90 * 24 * 60 * 60; // 90 days
+    const connectionId = randomUUID();
 
     await dynamodb.send(
       new TransactWriteCommand({
@@ -132,7 +134,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
               TableName: CONNECTIONS_TABLE_NAME,
               Item: {
                 userId: request.fromDid,
-                connectionId: request.toDid,
+                connectionId,
+                targetDid: request.toDid,
                 status: ConnectionStatus.CONNECTED,
                 createdAt: now,
                 updatedAt: now,
@@ -145,7 +148,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
               TableName: CONNECTIONS_TABLE_NAME,
               Item: {
                 userId: request.toDid,
-                connectionId: request.fromDid,
+                connectionId,
+                targetDid: request.fromDid,
                 status: ConnectionStatus.CONNECTED,
                 createdAt: now,
                 updatedAt: now,
@@ -157,11 +161,17 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       })
     );
 
-    logger.info('Connection request accepted', { requestId, fromDid: request.fromDid, toDid });
+    logger.info('Connection request accepted', {
+      requestId,
+      fromDid: request.fromDid,
+      toDid,
+      connectionId,
+    });
 
     return formatResponse(200, {
       message: 'Connection request accepted',
       requestId,
+      connectionId,
       fromDid: request.fromDid,
       toDid,
       status: ConnectionRequestStatus.ACCEPTED,

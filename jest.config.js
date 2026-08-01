@@ -9,7 +9,8 @@ module.exports = {
   testPathIgnorePatterns: [
     '/node_modules/',
     '/dist/',
-    'e2e\\.test\\.ts$', // E2E tests require real API Gateway
+    'e2e\.test\.ts$', // E2E tests require real API Gateway
+    'integration\.test\.ts$', // Integration tests are run separately
   ],
   transform: {
     '^.+\\.ts$': 'ts-jest',

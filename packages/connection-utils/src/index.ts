@@ -164,6 +164,76 @@ export function calculateInvitationExpiration(expiresInSeconds?: number): {
 }
 
 /**
+ * Message type enum
+ */
+export enum MessageType {
+  DIRECT = 'direct',
+  GROUP = 'group',
+}
+
+/**
+ * Message interface
+ */
+export interface Message {
+  messageId: string;
+  connectionId: string;
+  senderDid: string;
+  receiverDid: string;
+  content: string;
+  timestamp: string;
+  messageIdempotencyKey: string;
+}
+
+/**
+ * Send message request
+ */
+export interface SendMessageRequest {
+  content: string;
+}
+
+/**
+ * Send message response
+ */
+export interface SendMessageResponse {
+  success: boolean;
+  messageId: string;
+}
+
+/**
+ * Message list response
+ */
+export interface MessageListResponse {
+  messages: Array<{
+    messageId: string;
+    senderDid: string;
+    content: string;
+    timestamp: string;
+  }>;
+  nextToken?: string;
+}
+
+/**
+ * Generate message ID
+ */
+export function generateMessageId(): string {
+  return `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+/**
+ * Generate idempotency key
+ */
+export function generateIdempotencyKey(): string {
+  return `idem_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+}
+
+/**
+ * Validate message content
+ */
+export function isValidMessageContent(content: string): boolean {
+  return typeof content === 'string' && content.length > 0 && content.length <= 10240;
+}
+
+/**
  * Check if invitation is expired
  */
 export function isInvitationExpired(expiresAt: string): boolean {

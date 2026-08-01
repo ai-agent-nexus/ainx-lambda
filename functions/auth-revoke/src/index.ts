@@ -1,6 +1,11 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
+import {
+  DynamoDBDocumentClient,
+  PutCommand,
+  DeleteCommand,
+  GetCommand,
+} from '@aws-sdk/lib-dynamodb';
 import jwt from 'jsonwebtoken';
 import { Logger } from '@ainx/logger';
 import { formatResponse, parseBody } from '@ainx/shared-utils';
@@ -121,16 +126,27 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const body = parseBody<RevokeRequest>(event.body);
     if (body && body.refresh_token) {
       try {
-        await dynamodb.send(
-          new DeleteCommand({
+        const tokenResult = await dynamodb.send(
+          new GetCommand({
             TableName: REFRESH_TOKEN_TABLE_NAME,
             Key: { token: body.refresh_token },
           })
         );
 
-        logger.info('Refresh token deleted', {
-          refresh_token: body.refresh_token.substring(0, 10) + '...',
-        });
+        if ((tokenResult as any).Item && (tokenResult as any).Item.userId === userId) {
+          await dynamodb.send(
+            new DeleteCommand({
+              TableName: REFRESH_TOKEN_TABLE_NAME,
+              Key: { token: body.refresh_token },
+            })
+          );
+
+          logger.info('Refresh token deleted', {
+            refresh_token: body.refresh_token.substring(0, 10) + '...',
+          });
+        } else {
+          logger.warn('Refresh token does not belong to user', { userId });
+        }
       } catch (err) {
         logger.error('Error deleting refresh token', {
           error: (err as Error).message,
