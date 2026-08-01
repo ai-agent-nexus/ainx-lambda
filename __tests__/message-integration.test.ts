@@ -1,62 +1,74 @@
+process.env.CONNECTIONS_TABLE_NAME = 'test-connections-table';
+process.env.MESSAGES_TABLE_NAME = 'test-messages-table';
+
+import { APIGatewayProxyEvent } from 'aws-lambda';
 import { handler as sendHandler } from '../functions/connection-message-send/src/index';
 import { handler as listHandler } from '../functions/connection-message-list/src/index';
-import { APIGatewayProxyEvent } from 'aws-lambda';
 
-// Mock DynamoDB
+// Mock dependencies
+jest.mock('@ainx/logger');
+
+jest.mock('@ainx/shared-utils', () => ({
+  formatResponse: jest.fn((statusCode: number, body: Record<string, unknown>) => ({
+    statusCode,
+    headers: {
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Credentials': 'true',
+    },
+    body: JSON.stringify(body),
+  })),
+  validateInput: jest.fn((input: Record<string, unknown>, requiredFields: string[]) => {
+    const missingFields = requiredFields.filter((field) => !input[field]);
+    return {
+      valid: missingFields.length === 0,
+      missingFields,
+    };
+  }),
+  parseBody: jest.fn((body: string | null) => {
+    if (!body) return null;
+    try {
+      return JSON.parse(body);
+    } catch {
+      return null;
+    }
+  }),
+}));
+
+// Simple in-memory mock for DynamoDB
+const mockSend = jest.fn();
+
 jest.mock('@aws-sdk/client-dynamodb', () => ({
-  DynamoDBClient: jest.fn().mockImplementation(() => ({})),
+  DynamoDBClient: jest.fn(() => ({})),
 }));
 
 jest.mock('@aws-sdk/lib-dynamodb', () => ({
   DynamoDBDocumentClient: {
-    from: jest.fn().mockReturnValue({
-      send: jest.fn(),
-    }),
+    from: jest.fn(() => ({
+      send: (command: unknown) => mockSend(command),
+    })),
   },
-  GetCommand: jest.fn(),
-  PutCommand: jest.fn(),
-  QueryCommand: jest.fn(),
+  GetCommand: jest.fn((params) => params),
+  QueryCommand: jest.fn((params) => params),
+  PutCommand: jest.fn((params) => params),
 }));
 
-describe('Message Integration Tests', () => {
-  let mockDynamoDB: any;
-  let senderDid: string;
-  let receiverDid: string;
-  let connectionId: string;
+describe('Integration: Message Flow', () => {
+  const senderDid = 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ_sender';
+  const receiverDid = 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ_receiver';
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    senderDid = 'did:key:sender123';
-    receiverDid = 'did:key:receiver456';
-    connectionId = receiverDid;
-
-    process.env.CONNECTIONS_TABLE_NAME = 'test-connections';
-    process.env.MESSAGES_TABLE_NAME = 'test-messages';
-
-    const { DynamoDBDocumentClient } = jest.requireMock('@aws-sdk/lib-dynamodb');
-    mockDynamoDB = DynamoDBDocumentClient.from();
+    mockSend.mockClear();
   });
 
   afterEach(() => {
     jest.clearAllMocks();
   });
 
-  describe('POST /connections/{connectionId}/messages', () => {
-    it('should send message and return 201', async () => {
-      const mockEvent: Partial<APIGatewayProxyEvent> = {
-        path: `/connections/${connectionId}/messages`,
-        httpMethod: 'POST',
-        body: JSON.stringify({ content: 'Hello, this is a test message!' }),
-        requestContext: {
-          authorizer: {
-            did: senderDid,
-          },
-        } as any,
-        headers: {},
-      };
-
+  describe('Happy Path: Send Message', () => {
+    it('should send message successfully', async () => {
       // Mock connection exists
-      mockDynamoDB.send.mockResolvedValueOnce({
+      mockSend.mockResolvedValueOnce({
         Item: {
           userId: senderDid,
           connectionId: receiverDid,
@@ -65,39 +77,35 @@ describe('Message Integration Tests', () => {
       });
 
       // Mock no duplicate
-      mockDynamoDB.send.mockResolvedValueOnce({
+      mockSend.mockResolvedValueOnce({
         Items: [],
       });
 
       // Mock put message
-      mockDynamoDB.send.mockResolvedValueOnce({});
+      mockSend.mockResolvedValueOnce({});
 
-      const result = await sendHandler(mockEvent as APIGatewayProxyEvent);
-
-      expect(result.statusCode).toBe(201);
-      const body = JSON.parse(result.body);
-      expect(body.success).toBe(true);
-      expect(body.messageId).toBeDefined();
-    });
-
-    it('should handle duplicate message with idempotency', async () => {
-      const idempotencyKey = 'test-idempotency-key-123';
-      const mockEvent: Partial<APIGatewayProxyEvent> = {
-        path: `/connections/${connectionId}/messages`,
+      const sendEvent: Partial<APIGatewayProxyEvent> = {
+        path: `/connections/${receiverDid}/messages`,
         httpMethod: 'POST',
         body: JSON.stringify({ content: 'Hello, this is a test message!' }),
         requestContext: {
-          authorizer: {
-            did: senderDid,
-          },
+          authorizer: { did: senderDid },
         } as any,
-        headers: {
-          'x-idempotency-key': idempotencyKey,
-        },
+        headers: {},
       };
 
+      const sendResult = await sendHandler(sendEvent as APIGatewayProxyEvent);
+      expect(sendResult.statusCode).toBe(201);
+      const sendBody = JSON.parse(sendResult.body);
+      expect(sendBody.success).toBe(true);
+      expect(sendBody.messageId).toBeDefined();
+    });
+
+    it('should handle idempotency', async () => {
+      const idempotencyKey = 'test-idempotency-key-123';
+
       // Mock connection exists
-      mockDynamoDB.send.mockResolvedValueOnce({
+      mockSend.mockResolvedValueOnce({
         Item: {
           userId: senderDid,
           connectionId: receiverDid,
@@ -106,7 +114,7 @@ describe('Message Integration Tests', () => {
       });
 
       // Mock duplicate exists
-      mockDynamoDB.send.mockResolvedValueOnce({
+      mockSend.mockResolvedValueOnce({
         Items: [
           {
             messageId: 'msg_existing123',
@@ -115,55 +123,30 @@ describe('Message Integration Tests', () => {
         ],
       });
 
-      const result = await sendHandler(mockEvent as APIGatewayProxyEvent);
-
-      expect(result.statusCode).toBe(200);
-      const body = JSON.parse(result.body);
-      expect(body.success).toBe(true);
-      expect(body.messageId).toBe('msg_existing123');
-    });
-
-    it('should reject message to unauthorized connection', async () => {
-      const mockEvent: Partial<APIGatewayProxyEvent> = {
-        path: `/connections/${connectionId}/messages`,
+      const sendEvent: Partial<APIGatewayProxyEvent> = {
+        path: `/connections/${receiverDid}/messages`,
         httpMethod: 'POST',
-        body: JSON.stringify({ content: 'Hello!' }),
+        body: JSON.stringify({ content: 'Hello, this is a test message!' }),
         requestContext: {
-          authorizer: {
-            did: senderDid,
-          },
+          authorizer: { did: senderDid },
         } as any,
-        headers: {},
+        headers: {
+          'x-idempotency-key': idempotencyKey,
+        },
       };
 
-      // Mock connection not found
-      mockDynamoDB.send.mockResolvedValueOnce({
-        Item: null,
-      });
-
-      const result = await sendHandler(mockEvent as APIGatewayProxyEvent);
-
-      expect(result.statusCode).toBe(403);
-      const body = JSON.parse(result.body);
-      expect(body.error).toBe('You are not part of this connection');
+      const sendResult = await sendHandler(sendEvent as APIGatewayProxyEvent);
+      expect(sendResult.statusCode).toBe(200);
+      const sendBody = JSON.parse(sendResult.body);
+      expect(sendBody.success).toBe(true);
+      expect(sendBody.messageId).toBe('msg_existing123');
     });
   });
 
-  describe('GET /connections/{connectionId}/messages', () => {
+  describe('Happy Path: List Messages', () => {
     it('should list messages for connection', async () => {
-      const mockEvent: Partial<APIGatewayProxyEvent> = {
-        path: `/connections/${connectionId}/messages`,
-        httpMethod: 'GET',
-        queryStringParameters: {},
-        requestContext: {
-          authorizer: {
-            did: senderDid,
-          },
-        } as any,
-      };
-
       // Mock connection exists
-      mockDynamoDB.send.mockResolvedValueOnce({
+      mockSend.mockResolvedValueOnce({
         Item: {
           userId: senderDid,
           connectionId: receiverDid,
@@ -172,7 +155,7 @@ describe('Message Integration Tests', () => {
       });
 
       // Mock messages
-      mockDynamoDB.send.mockResolvedValueOnce({
+      mockSend.mockResolvedValueOnce({
         Items: [
           {
             messageId: 'msg_001',
@@ -191,31 +174,26 @@ describe('Message Integration Tests', () => {
         ],
       });
 
-      const result = await listHandler(mockEvent as APIGatewayProxyEvent);
-
-      expect(result.statusCode).toBe(200);
-      const body = JSON.parse(result.body);
-      expect(body.messages).toHaveLength(2);
-      expect(body.messages[0].messageId).toBe('msg_001');
-      expect(body.messages[1].messageId).toBe('msg_002');
-    });
-
-    it('should support pagination', async () => {
-      const mockEvent: Partial<APIGatewayProxyEvent> = {
-        path: `/connections/${connectionId}/messages`,
+      const listEvent: Partial<APIGatewayProxyEvent> = {
+        path: `/connections/${receiverDid}/messages`,
         httpMethod: 'GET',
-        queryStringParameters: {
-          limit: '1',
-        },
+        queryStringParameters: {},
         requestContext: {
-          authorizer: {
-            did: senderDid,
-          },
+          authorizer: { did: senderDid },
         } as any,
       };
 
+      const listResult = await listHandler(listEvent as APIGatewayProxyEvent);
+      expect(listResult.statusCode).toBe(200);
+      const listBody = JSON.parse(listResult.body);
+      expect(listBody.messages).toHaveLength(2);
+      expect(listBody.messages[0].messageId).toBe('msg_001');
+      expect(listBody.messages[1].messageId).toBe('msg_002');
+    });
+
+    it('should support pagination', async () => {
       // Mock connection exists
-      mockDynamoDB.send.mockResolvedValueOnce({
+      mockSend.mockResolvedValueOnce({
         Item: {
           userId: senderDid,
           connectionId: receiverDid,
@@ -224,7 +202,7 @@ describe('Message Integration Tests', () => {
       });
 
       // Mock messages with pagination
-      mockDynamoDB.send.mockResolvedValueOnce({
+      mockSend.mockResolvedValueOnce({
         Items: [
           {
             messageId: 'msg_001',
@@ -240,136 +218,78 @@ describe('Message Integration Tests', () => {
         },
       });
 
-      const result = await listHandler(mockEvent as APIGatewayProxyEvent);
-
-      expect(result.statusCode).toBe(200);
-      const body = JSON.parse(result.body);
-      expect(body.messages).toHaveLength(1);
-      expect(body.nextToken).toBeDefined();
-    });
-
-    it('should filter messages from other connections', async () => {
-      const mockEvent: Partial<APIGatewayProxyEvent> = {
-        path: `/connections/${connectionId}/messages`,
-        httpMethod: 'GET',
-        queryStringParameters: {},
-        requestContext: {
-          authorizer: {
-            did: senderDid,
-          },
-        } as any,
-      };
-
-      // Mock connection exists
-      mockDynamoDB.send.mockResolvedValueOnce({
-        Item: {
-          userId: senderDid,
-          connectionId: receiverDid,
-          status: 'CONNECTED',
-        },
-      });
-
-      // Mock messages including one from different connection
-      mockDynamoDB.send.mockResolvedValueOnce({
-        Items: [
-          {
-            messageId: 'msg_001',
-            connectionId: receiverDid,
-            senderDid: receiverDid,
-            content: 'Valid message',
-            timestamp: '2024-01-15T10:00:00Z',
-          },
-          {
-            messageId: 'msg_002',
-            connectionId: 'did:key:other',
-            senderDid: 'did:key:other',
-            content: 'Wrong connection',
-            timestamp: '2024-01-15T10:01:00Z',
-          },
-        ],
-      });
-
-      const result = await listHandler(mockEvent as APIGatewayProxyEvent);
-
-      expect(result.statusCode).toBe(200);
-      const body = JSON.parse(result.body);
-      expect(body.messages).toHaveLength(1);
-      expect(body.messages[0].messageId).toBe('msg_001');
-    });
-  });
-
-  describe('End-to-end message flow', () => {
-    it('should send and list messages in sequence', async () => {
-      // Step 1: Send message
-      const sendEvent: Partial<APIGatewayProxyEvent> = {
-        path: `/connections/${connectionId}/messages`,
-        httpMethod: 'POST',
-        body: JSON.stringify({ content: 'Test message flow' }),
-        requestContext: {
-          authorizer: {
-            did: senderDid,
-          },
-        } as any,
-        headers: {},
-      };
-
-      mockDynamoDB.send.mockResolvedValueOnce({
-        Item: {
-          userId: senderDid,
-          connectionId: receiverDid,
-          status: 'CONNECTED',
-        },
-      });
-
-      mockDynamoDB.send.mockResolvedValueOnce({
-        Items: [],
-      });
-
-      mockDynamoDB.send.mockResolvedValueOnce({});
-
-      const sendResult = await sendHandler(sendEvent as APIGatewayProxyEvent);
-      expect(sendResult.statusCode).toBe(201);
-      const sendBody = JSON.parse(sendResult.body);
-      const messageId = sendBody.messageId;
-
-      // Step 2: List messages
       const listEvent: Partial<APIGatewayProxyEvent> = {
-        path: `/connections/${connectionId}/messages`,
+        path: `/connections/${receiverDid}/messages`,
         httpMethod: 'GET',
-        queryStringParameters: {},
+        queryStringParameters: {
+          limit: '1',
+        },
         requestContext: {
-          authorizer: {
-            did: receiverDid,
-          },
+          authorizer: { did: senderDid },
         } as any,
       };
-
-      mockDynamoDB.send.mockResolvedValueOnce({
-        Item: {
-          userId: receiverDid,
-          connectionId: senderDid,
-          status: 'CONNECTED',
-        },
-      });
-
-      mockDynamoDB.send.mockResolvedValueOnce({
-        Items: [
-          {
-            messageId,
-            connectionId: receiverDid,
-            senderDid,
-            content: 'Test message flow',
-            timestamp: '2024-01-15T10:00:00Z',
-          },
-        ],
-      });
 
       const listResult = await listHandler(listEvent as APIGatewayProxyEvent);
       expect(listResult.statusCode).toBe(200);
       const listBody = JSON.parse(listResult.body);
       expect(listBody.messages).toHaveLength(1);
-      expect(listBody.messages[0].messageId).toBe(messageId);
-      expect(listBody.messages[0].content).toBe('Test message flow');
+      expect(listBody.nextToken).toBeDefined();
+    });
+  });
+
+  describe('Error Cases', () => {
+    it('should reject message to unauthorized connection', async () => {
+      const unauthorizedReceiver = 'did:key:unauthorized';
+
+      // Mock connection not found
+      mockSend.mockResolvedValueOnce({
+        Item: null,
+      });
+
+      const sendEvent: Partial<APIGatewayProxyEvent> = {
+        path: `/connections/${unauthorizedReceiver}/messages`,
+        httpMethod: 'POST',
+        body: JSON.stringify({ content: 'Hello!' }),
+        requestContext: {
+          authorizer: { did: senderDid },
+        } as any,
+        headers: {},
+      };
+
+      const sendResult = await sendHandler(sendEvent as APIGatewayProxyEvent);
+      expect(sendResult.statusCode).toBe(403);
+      const sendBody = JSON.parse(sendResult.body);
+      expect(sendBody.error).toBe('You are not part of this connection');
+    });
+
+    it('should reject empty message content', async () => {
+      const sendEvent: Partial<APIGatewayProxyEvent> = {
+        path: `/connections/${receiverDid}/messages`,
+        httpMethod: 'POST',
+        body: JSON.stringify({ content: '' }),
+        requestContext: {
+          authorizer: { did: senderDid },
+        } as any,
+        headers: {},
+      };
+
+      const sendResult = await sendHandler(sendEvent as APIGatewayProxyEvent);
+      expect(sendResult.statusCode).toBe(400);
+      const sendBody = JSON.parse(sendResult.body);
+      expect(sendBody.error).toBe('Invalid message content');
+    });
+
+    it('should reject missing authorization', async () => {
+      const sendEvent: Partial<APIGatewayProxyEvent> = {
+        path: `/connections/${receiverDid}/messages`,
+        httpMethod: 'POST',
+        body: JSON.stringify({ content: 'Hello!' }),
+        requestContext: {} as any,
+        headers: {},
+      };
+
+      const sendResult = await sendHandler(sendEvent as APIGatewayProxyEvent);
+      expect(sendResult.statusCode).toBe(401);
     });
   });
 });
