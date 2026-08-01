@@ -10,6 +10,7 @@ import jwt from 'jsonwebtoken';
 import { Logger } from '@ainx/logger';
 import { formatResponse, parseBody, validateInput } from '@ainx/shared-utils';
 import { v4 as uuidv4 } from 'uuid';
+import { randomBytes } from 'crypto';
 
 const logger = new Logger('auth-refresh');
 const client = new DynamoDBClient({});
@@ -254,9 +255,5 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 };
 
 function generateRefreshToken(): string {
-  const bytes = Buffer.alloc(32);
-  for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = Math.floor(Math.random() * 256);
-  }
-  return bytes.toString('base64url');
+  return randomBytes(32).toString('base64url');
 }

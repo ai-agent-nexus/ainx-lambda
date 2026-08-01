@@ -71,6 +71,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
 
     const now = new Date().toISOString();
+    const targetDid = connectionResult.Item.targetDid as string;
 
     await dynamodb.send(
       new TransactWriteCommand({
@@ -96,8 +97,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             Update: {
               TableName: CONNECTIONS_TABLE_NAME,
               Key: {
-                userId: connectionId,
-                connectionId: userId,
+                userId: targetDid,
+                connectionId,
               },
               UpdateExpression: 'SET #status = :status, updatedAt = :updatedAt',
               ExpressionAttributeNames: {
