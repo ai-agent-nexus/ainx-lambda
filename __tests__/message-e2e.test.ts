@@ -110,13 +110,9 @@ describe('E2E: Message Management', () => {
     const senderToken = await getJwtToken(senderDid, senderSign);
     const receiverToken = await getJwtToken(receiverDid, receiverSign);
 
-    // Sender creates invitation
     const invitationResponse = await axios.post(
       INVITATIONS_URL,
-      {
-        targetDid: receiverDid,
-        expiresIn: 3600,
-      },
+      {},
       {
         headers: {
           'Content-Type': 'application/json',
@@ -128,17 +124,16 @@ describe('E2E: Message Management', () => {
 
     const invitationCode = invitationResponse.data.invitationCode;
 
-    // Receiver accepts invitation
     const requestResponse = await axios.post(
       REQUESTS_URL,
       {
+        toDid: receiverDid,
         invitationCode,
-        senderDid,
       },
       {
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${receiverToken}`,
+          Authorization: `Bearer ${senderToken}`,
         },
         timeout: 10000,
       }
@@ -146,14 +141,13 @@ describe('E2E: Message Management', () => {
 
     const requestId = requestResponse.data.requestId;
 
-    // Sender accepts request
     await axios.post(
       `${REQUESTS_URL}/${requestId}/accept`,
       {},
       {
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${senderToken}`,
+          Authorization: `Bearer ${receiverToken}`,
         },
         timeout: 10000,
       }
