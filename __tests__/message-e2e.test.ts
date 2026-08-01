@@ -393,7 +393,12 @@ describe('E2E: Message Management', () => {
       await registerAgent(unauthorizedDid, unauthorizedSign);
 
       // Create connection between sender and receiver
-      const { connectionId } = await createConnection(senderDid, senderSign, receiverDid, receiverSign);
+      const { connectionId } = await createConnection(
+        senderDid,
+        senderSign,
+        receiverDid,
+        receiverSign
+      );
 
       // Unauthorized user tries to send message
       const unauthorizedToken = await getJwtToken(unauthorizedDid, unauthorizedSign);
@@ -477,7 +482,12 @@ describe('E2E: Message Management', () => {
       await registerAgent(unauthorizedDid, unauthorizedSign);
 
       // Create connection between sender and receiver
-      const { connectionId } = await createConnection(senderDid, senderSign, receiverDid, receiverSign);
+      const { connectionId } = await createConnection(
+        senderDid,
+        senderSign,
+        receiverDid,
+        receiverSign
+      );
 
       // Unauthorized user tries to list messages
       const unauthorizedToken = await getJwtToken(unauthorizedDid, unauthorizedSign);

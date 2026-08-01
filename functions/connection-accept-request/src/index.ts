@@ -161,7 +161,12 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       })
     );
 
-    logger.info('Connection request accepted', { requestId, fromDid: request.fromDid, toDid, connectionId });
+    logger.info('Connection request accepted', {
+      requestId,
+      fromDid: request.fromDid,
+      toDid,
+      connectionId,
+    });
 
     return formatResponse(200, {
       message: 'Connection request accepted',

@@ -1,6 +1,11 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
+import {
+  DynamoDBDocumentClient,
+  PutCommand,
+  DeleteCommand,
+  GetCommand,
+} from '@aws-sdk/lib-dynamodb';
 import jwt from 'jsonwebtoken';
 import { Logger } from '@ainx/logger';
 import { formatResponse, parseBody } from '@ainx/shared-utils';
@@ -128,7 +133,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
           })
         );
 
-        if (tokenResult.Item && tokenResult.Item.userId === userId) {
+        if ((tokenResult as any).Item && (tokenResult as any).Item.userId === userId) {
           await dynamodb.send(
             new DeleteCommand({
               TableName: REFRESH_TOKEN_TABLE_NAME,
