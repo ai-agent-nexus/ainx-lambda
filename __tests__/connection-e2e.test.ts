@@ -311,6 +311,7 @@ describe('E2E: Connection Management', () => {
 
       expect(response.status).toBe(200);
       expect(response.data.status).toBe('ACCEPTED');
+      expect(response.data.connectionId).toBeDefined();
     });
 
     it('should list connections for sender', async () => {
@@ -347,7 +348,7 @@ describe('E2E: Connection Management', () => {
         }
       );
 
-      await axios.post(
+      const acceptResponse = await axios.post(
         `${REQUESTS_URL}/${requestResponse.data.requestId}/accept`,
         {},
         {
@@ -358,6 +359,8 @@ describe('E2E: Connection Management', () => {
           timeout: 10000,
         }
       );
+
+      const connectionId = acceptResponse.data.connectionId;
 
       // List connections
       const response = await axios.get(CONNECTIONS_URL, {
@@ -370,12 +373,12 @@ describe('E2E: Connection Management', () => {
       expect(response.status).toBe(200);
       expect(response.data.connections).toBeInstanceOf(Array);
       expect(response.data.connections.length).toBeGreaterThan(0);
-      expect(response.data.connections[0].connectionId).toBe(receiver.did);
+      expect(response.data.connections[0].connectionId).toBe(connectionId);
       expect(response.data.connections[0].status).toBe('CONNECTED');
     });
 
     it('should list connections for receiver', async () => {
-      const { sender, receiver, senderToken, receiverToken } = await createTestContext();
+      const { receiver, senderToken, receiverToken } = await createTestContext();
 
       // Create invitation
       const inviteResponse = await axios.post(
@@ -408,7 +411,7 @@ describe('E2E: Connection Management', () => {
         }
       );
 
-      await axios.post(
+      const acceptResponse = await axios.post(
         `${REQUESTS_URL}/${requestResponse.data.requestId}/accept`,
         {},
         {
@@ -419,6 +422,8 @@ describe('E2E: Connection Management', () => {
           timeout: 10000,
         }
       );
+
+      const connectionId = acceptResponse.data.connectionId;
 
       // List connections for receiver
       const response = await axios.get(CONNECTIONS_URL, {
@@ -431,7 +436,7 @@ describe('E2E: Connection Management', () => {
       expect(response.status).toBe(200);
       expect(response.data.connections).toBeInstanceOf(Array);
       expect(response.data.connections.length).toBeGreaterThan(0);
-      expect(response.data.connections[0].connectionId).toBe(sender.did);
+      expect(response.data.connections[0].connectionId).toBe(connectionId);
     });
 
     it('should remove a connection', async () => {
@@ -468,7 +473,7 @@ describe('E2E: Connection Management', () => {
         }
       );
 
-      await axios.post(
+      const acceptResponse = await axios.post(
         `${REQUESTS_URL}/${requestResponse.data.requestId}/accept`,
         {},
         {
@@ -480,8 +485,10 @@ describe('E2E: Connection Management', () => {
         }
       );
 
+      const connectionId = acceptResponse.data.connectionId;
+
       // Remove connection
-      const response = await axios.delete(`${CONNECTIONS_URL}/${receiver.did}`, {
+      const response = await axios.delete(`${CONNECTIONS_URL}/${connectionId}`, {
         headers: {
           Authorization: `Bearer ${senderToken}`,
         },
@@ -526,7 +533,7 @@ describe('E2E: Connection Management', () => {
         }
       );
 
-      await axios.post(
+      const acceptResponse = await axios.post(
         `${REQUESTS_URL}/${requestResponse.data.requestId}/accept`,
         {},
         {
@@ -538,8 +545,10 @@ describe('E2E: Connection Management', () => {
         }
       );
 
+      const connectionId = acceptResponse.data.connectionId;
+
       // Remove connection
-      await axios.delete(`${CONNECTIONS_URL}/${receiver.did}`, {
+      await axios.delete(`${CONNECTIONS_URL}/${connectionId}`, {
         headers: {
           Authorization: `Bearer ${senderToken}`,
         },
