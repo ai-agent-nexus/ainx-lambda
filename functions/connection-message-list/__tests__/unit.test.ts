@@ -29,11 +29,13 @@ jest.mock('@aws-sdk/lib-dynamodb', () => ({
 describe('connection-message-list', () => {
   let mockEvent: Partial<APIGatewayProxyEvent>;
   let mockDynamoDB: any;
+  const testConnectionId = '550e8400-e29b-41d4-a716-446655440000';
+  const testTargetDid = 'did:key:receiver';
 
   beforeEach(() => {
     jest.clearAllMocks();
     mockEvent = {
-      path: '/connections/did:key:receiver/messages',
+      path: `/connections/${testConnectionId}/messages`,
       httpMethod: 'GET',
       queryStringParameters: {},
       requestContext: {
@@ -51,7 +53,8 @@ describe('connection-message-list', () => {
     mockDynamoDB.send.mockResolvedValueOnce({
       Item: {
         userId: 'did:key:sender',
-        connectionId: 'did:key:receiver',
+        connectionId: testConnectionId,
+        targetDid: testTargetDid,
         status: 'CONNECTED',
       },
     });
@@ -60,14 +63,14 @@ describe('connection-message-list', () => {
       Items: [
         {
           messageId: 'msg_001',
-          connectionId: 'did:key:receiver',
+          connectionId: testConnectionId,
           senderDid: 'did:key:receiver',
           content: 'Hello',
           timestamp: '2024-01-15T10:00:00Z',
         },
         {
           messageId: 'msg_002',
-          connectionId: 'did:key:receiver',
+          connectionId: testConnectionId,
           senderDid: 'did:key:sender',
           content: 'Hi there',
           timestamp: '2024-01-15T10:01:00Z',
@@ -115,7 +118,8 @@ describe('connection-message-list', () => {
     mockDynamoDB.send.mockResolvedValueOnce({
       Item: {
         userId: 'did:key:sender',
-        connectionId: 'did:key:receiver',
+        connectionId: testConnectionId,
+        targetDid: testTargetDid,
         status: 'CONNECTED',
       },
     });
@@ -124,14 +128,14 @@ describe('connection-message-list', () => {
       Items: [
         {
           messageId: 'msg_001',
-          connectionId: 'did:key:receiver',
+          connectionId: testConnectionId,
           senderDid: 'did:key:receiver',
           content: 'Hello',
           timestamp: '2024-01-15T10:00:00Z',
         },
       ],
       LastEvaluatedKey: {
-        receiverDid: 'did:key:sender',
+        receiverDid: testTargetDid,
         timestamp: '2024-01-15T10:00:00Z',
       },
     });
@@ -148,7 +152,8 @@ describe('connection-message-list', () => {
     mockDynamoDB.send.mockResolvedValueOnce({
       Item: {
         userId: 'did:key:sender',
-        connectionId: 'did:key:receiver',
+        connectionId: testConnectionId,
+        targetDid: testTargetDid,
         status: 'CONNECTED',
       },
     });
@@ -157,14 +162,14 @@ describe('connection-message-list', () => {
       Items: [
         {
           messageId: 'msg_001',
-          connectionId: 'did:key:receiver',
+          connectionId: testConnectionId,
           senderDid: 'did:key:receiver',
           content: 'Hello',
           timestamp: '2024-01-15T10:00:00Z',
         },
         {
           messageId: 'msg_002',
-          connectionId: 'did:key:other',
+          connectionId: 'other-connection-id',
           senderDid: 'did:key:other',
           content: 'Wrong connection',
           timestamp: '2024-01-15T10:01:00Z',

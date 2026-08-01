@@ -81,14 +81,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     );
     const nextToken = event.queryStringParameters?.nextToken;
 
-    const sortedDids = [userDid, connectionId].sort();
-    const consistentConnectionId = `${sortedDids[0]}#${sortedDids[1]}`;
+    const receiverDid = userDid;
 
     const queryParams: any = {
       TableName: messagesTableName,
       KeyConditionExpression: 'receiverDid = :receiverDid',
       ExpressionAttributeValues: {
-        ':receiverDid': userDid,
+        ':receiverDid': receiverDid,
       },
       Limit: limit,
       ScanIndexForward: false,
@@ -102,7 +101,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     // Filter messages for this connection only
     const messages = (result.Items || [])
-      .filter((item: any) => item.connectionId === consistentConnectionId)
+      .filter((item: any) => item.connectionId === connectionId)
       .map((item: any) => ({
         messageId: item.messageId,
         senderDid: item.senderDid,

@@ -141,7 +141,7 @@ describe('E2E: Message Management', () => {
 
     const requestId = requestResponse.data.requestId;
 
-    await axios.post(
+    const acceptResponse = await axios.post(
       `${REQUESTS_URL}/${requestId}/accept`,
       {},
       {
@@ -153,7 +153,9 @@ describe('E2E: Message Management', () => {
       }
     );
 
-    return { senderToken, receiverToken };
+    const connectionId = acceptResponse.data.connectionId;
+
+    return { senderToken, receiverToken, connectionId };
   };
 
   describe('Happy Path: Send Message', () => {
@@ -164,7 +166,7 @@ describe('E2E: Message Management', () => {
       await registerAgent(senderDid, senderSign);
       await registerAgent(receiverDid, receiverSign);
 
-      const { senderToken } = await createConnection(
+      const { senderToken, connectionId } = await createConnection(
         senderDid,
         senderSign,
         receiverDid,
@@ -172,7 +174,7 @@ describe('E2E: Message Management', () => {
       );
 
       const messageResponse = await axios.post(
-        `${MESSAGES_URL}/${receiverDid}/messages`,
+        `${MESSAGES_URL}/${connectionId}/messages`,
         {
           content: 'Hello, this is an E2E test message!',
         },
@@ -197,7 +199,7 @@ describe('E2E: Message Management', () => {
       await registerAgent(senderDid, senderSign);
       await registerAgent(receiverDid, receiverSign);
 
-      const { senderToken } = await createConnection(
+      const { senderToken, connectionId } = await createConnection(
         senderDid,
         senderSign,
         receiverDid,
@@ -205,7 +207,7 @@ describe('E2E: Message Management', () => {
       );
 
       const messageResponse = await axios.post(
-        `${MESSAGES_URL}/${receiverDid}/messages`,
+        `${MESSAGES_URL}/${connectionId}/messages`,
         {
           content: 'Hi',
         },
@@ -231,7 +233,7 @@ describe('E2E: Message Management', () => {
       await registerAgent(senderDid, senderSign);
       await registerAgent(receiverDid, receiverSign);
 
-      const { senderToken, receiverToken } = await createConnection(
+      const { senderToken, receiverToken, connectionId } = await createConnection(
         senderDid,
         senderSign,
         receiverDid,
@@ -240,7 +242,7 @@ describe('E2E: Message Management', () => {
 
       // Send a message
       await axios.post(
-        `${MESSAGES_URL}/${receiverDid}/messages`,
+        `${MESSAGES_URL}/${connectionId}/messages`,
         {
           content: 'Test message for listing',
         },
@@ -254,7 +256,7 @@ describe('E2E: Message Management', () => {
       );
 
       // List messages as receiver
-      const listResponse = await axios.get(`${MESSAGES_URL}/${senderDid}/messages`, {
+      const listResponse = await axios.get(`${MESSAGES_URL}/${connectionId}/messages`, {
         headers: {
           Authorization: `Bearer ${receiverToken}`,
         },
@@ -273,7 +275,7 @@ describe('E2E: Message Management', () => {
       await registerAgent(senderDid, senderSign);
       await registerAgent(receiverDid, receiverSign);
 
-      const { senderToken, receiverToken } = await createConnection(
+      const { senderToken, receiverToken, connectionId } = await createConnection(
         senderDid,
         senderSign,
         receiverDid,
@@ -283,7 +285,7 @@ describe('E2E: Message Management', () => {
       // Send multiple messages
       for (let i = 0; i < 3; i++) {
         await axios.post(
-          `${MESSAGES_URL}/${receiverDid}/messages`,
+          `${MESSAGES_URL}/${connectionId}/messages`,
           {
             content: `Message ${i + 1}`,
           },
@@ -298,7 +300,7 @@ describe('E2E: Message Management', () => {
       }
 
       // List with limit=1
-      const listResponse = await axios.get(`${MESSAGES_URL}/${senderDid}/messages?limit=1`, {
+      const listResponse = await axios.get(`${MESSAGES_URL}/${connectionId}/messages?limit=1`, {
         headers: {
           Authorization: `Bearer ${receiverToken}`,
         },
@@ -318,7 +320,7 @@ describe('E2E: Message Management', () => {
       await registerAgent(senderDid, senderSign);
       await registerAgent(receiverDid, receiverSign);
 
-      const { senderToken, receiverToken } = await createConnection(
+      const { senderToken, receiverToken, connectionId } = await createConnection(
         senderDid,
         senderSign,
         receiverDid,
@@ -327,7 +329,7 @@ describe('E2E: Message Management', () => {
 
       // Sender sends message to receiver
       const sendResponse = await axios.post(
-        `${MESSAGES_URL}/${receiverDid}/messages`,
+        `${MESSAGES_URL}/${connectionId}/messages`,
         {
           content: 'Hello from sender!',
         },
@@ -344,7 +346,7 @@ describe('E2E: Message Management', () => {
       const messageId = sendResponse.data.messageId;
 
       // Receiver lists messages
-      const listResponse = await axios.get(`${MESSAGES_URL}/${senderDid}/messages`, {
+      const listResponse = await axios.get(`${MESSAGES_URL}/${connectionId}/messages`, {
         headers: {
           Authorization: `Bearer ${receiverToken}`,
         },
@@ -391,14 +393,14 @@ describe('E2E: Message Management', () => {
       await registerAgent(unauthorizedDid, unauthorizedSign);
 
       // Create connection between sender and receiver
-      await createConnection(senderDid, senderSign, receiverDid, receiverSign);
+      const { connectionId } = await createConnection(senderDid, senderSign, receiverDid, receiverSign);
 
       // Unauthorized user tries to send message
       const unauthorizedToken = await getJwtToken(unauthorizedDid, unauthorizedSign);
 
       try {
         await axios.post(
-          `${MESSAGES_URL}/${receiverDid}/messages`,
+          `${MESSAGES_URL}/${connectionId}/messages`,
           {
             content: 'Unauthorized message',
           },
@@ -423,7 +425,7 @@ describe('E2E: Message Management', () => {
       await registerAgent(senderDid, senderSign);
       await registerAgent(receiverDid, receiverSign);
 
-      const { senderToken } = await createConnection(
+      const { senderToken, connectionId } = await createConnection(
         senderDid,
         senderSign,
         receiverDid,
@@ -432,7 +434,7 @@ describe('E2E: Message Management', () => {
 
       try {
         await axios.post(
-          `${MESSAGES_URL}/${receiverDid}/messages`,
+          `${MESSAGES_URL}/${connectionId}/messages`,
           {
             content: '',
           },
@@ -475,13 +477,13 @@ describe('E2E: Message Management', () => {
       await registerAgent(unauthorizedDid, unauthorizedSign);
 
       // Create connection between sender and receiver
-      await createConnection(senderDid, senderSign, receiverDid, receiverSign);
+      const { connectionId } = await createConnection(senderDid, senderSign, receiverDid, receiverSign);
 
       // Unauthorized user tries to list messages
       const unauthorizedToken = await getJwtToken(unauthorizedDid, unauthorizedSign);
 
       try {
-        await axios.get(`${MESSAGES_URL}/${receiverDid}/messages`, {
+        await axios.get(`${MESSAGES_URL}/${connectionId}/messages`, {
           headers: {
             Authorization: `Bearer ${unauthorizedToken}`,
           },
@@ -502,7 +504,7 @@ describe('E2E: Message Management', () => {
       await registerAgent(senderDid, senderSign);
       await registerAgent(receiverDid, receiverSign);
 
-      const { receiverToken } = await createConnection(
+      const { receiverToken, connectionId } = await createConnection(
         senderDid,
         senderSign,
         receiverDid,
@@ -510,7 +512,7 @@ describe('E2E: Message Management', () => {
       );
 
       // List messages without sending any
-      const listResponse = await axios.get(`${MESSAGES_URL}/${senderDid}/messages`, {
+      const listResponse = await axios.get(`${MESSAGES_URL}/${connectionId}/messages`, {
         headers: {
           Authorization: `Bearer ${receiverToken}`,
         },
@@ -529,7 +531,7 @@ describe('E2E: Message Management', () => {
       await registerAgent(senderDid, senderSign);
       await registerAgent(receiverDid, receiverSign);
 
-      const { senderToken } = await createConnection(
+      const { senderToken, connectionId } = await createConnection(
         senderDid,
         senderSign,
         receiverDid,
@@ -539,7 +541,7 @@ describe('E2E: Message Management', () => {
       const largeContent = 'A'.repeat(1000);
 
       const messageResponse = await axios.post(
-        `${MESSAGES_URL}/${receiverDid}/messages`,
+        `${MESSAGES_URL}/${connectionId}/messages`,
         {
           content: largeContent,
         },
@@ -565,7 +567,7 @@ describe('E2E: Message Management', () => {
       await registerAgent(senderDid, senderSign);
       await registerAgent(receiverDid, receiverSign);
 
-      const { senderToken } = await createConnection(
+      const { senderToken, connectionId } = await createConnection(
         senderDid,
         senderSign,
         receiverDid,
@@ -575,7 +577,7 @@ describe('E2E: Message Management', () => {
       const maliciousContent = "'; DROP TABLE messages; --";
 
       const messageResponse = await axios.post(
-        `${MESSAGES_URL}/${receiverDid}/messages`,
+        `${MESSAGES_URL}/${connectionId}/messages`,
         {
           content: maliciousContent,
         },

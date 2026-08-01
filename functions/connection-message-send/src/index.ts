@@ -108,9 +108,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       });
     }
 
-    const receiverDid = connectionId;
-    const sortedDids = [senderDid, receiverDid].sort();
-    const consistentConnectionId = `${sortedDids[0]}#${sortedDids[1]}`;
+    const receiverDid = connectionResult.Item.targetDid as string;
+    const consistentConnectionId = connectionId;
 
     // Check for duplicate (idempotency)
     const idempotencyKey = event.headers['x-idempotency-key'] || generateIdempotencyKey();
