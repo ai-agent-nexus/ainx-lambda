@@ -1,269 +1,601 @@
-import { handler as sendHandler } from '../functions/connection-message-send/src/index';
-import { handler as listHandler } from '../functions/connection-message-list/src/index';
-import { APIGatewayProxyEvent } from 'aws-lambda';
+import axios from 'axios';
+import crypto from 'crypto';
 
-// Mock DynamoDB
-jest.mock('@aws-sdk/client-dynamodb', () => ({
-  DynamoDBClient: jest.fn().mockImplementation(() => ({})),
-}));
+/**
+ * E2E Tests for Message API
+ *
+ * These tests call the actual API Gateway endpoint to verify end-to-end functionality.
+ * Run with: API_GATEWAY_URL=<url> npm run test:e2e
+ *
+ * Requirements:
+ * - API_GATEWAY_URL environment variable pointing to the deployed API Gateway
+ * - AWS credentials for the test environment
+ * - Two valid did:key pairs (sender and receiver)
+ */
 
-jest.mock('@aws-sdk/lib-dynamodb', () => ({
-  DynamoDBDocumentClient: {
-    from: jest.fn().mockReturnValue({
-      send: jest.fn(),
-    }),
-  },
-  GetCommand: jest.fn(),
-  PutCommand: jest.fn(),
-  QueryCommand: jest.fn(),
-}));
+// Get API Gateway URL from environment or use default
+const API_BASE_URL = process.env.API_GATEWAY_URL || 'http://localhost:3000';
+const MESSAGES_URL = `${API_BASE_URL}/connections`;
+const REGISTER_URL = `${API_BASE_URL}/agents/register`;
+const CHALLENGE_URL = `${API_BASE_URL}/auth/challenge`;
+const TOKEN_URL = `${API_BASE_URL}/auth/token`;
+const INVITATIONS_URL = `${API_BASE_URL}/connections/invitations`;
+const REQUESTS_URL = `${API_BASE_URL}/connections/requests`;
 
-describe('Message E2E Tests', () => {
-  let mockDynamoDB: any;
-  let senderDid: string;
-  let receiverDid: string;
-  let connectionId: string;
+describe('E2E: Message Management', () => {
+  // Generate a valid did:key with proper signature
+  const generateValidDid = () => {
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+    const publicKeyDer = publicKey.export({ type: 'spki', format: 'der' });
+    const rawPublicKey = publicKeyDer.slice(-32);
+    const multicodecPrefix = Buffer.from([0xed, 0x01]);
+    const dataWithPrefix = Buffer.concat([multicodecPrefix, rawPublicKey]);
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-    senderDid = 'did:key:sender123';
-    receiverDid = 'did:key:receiver456';
-    connectionId = receiverDid;
+    const base58Chars = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+    let encoded = '';
+    let num = BigInt('0x' + dataWithPrefix.toString('hex'));
+    while (num > 0) {
+      encoded = base58Chars[Number(num % BigInt(58))] + encoded;
+      num = num / BigInt(58);
+    }
+    for (let i = 0; i < dataWithPrefix.length && dataWithPrefix[i] === 0; i++) {
+      encoded = '1' + encoded;
+    }
 
-    process.env.CONNECTIONS_TABLE_NAME = 'test-connections';
-    process.env.MESSAGES_TABLE_NAME = 'test-messages';
+    const did = `did:key:z${encoded}`;
 
-    const { DynamoDBDocumentClient } = jest.requireMock('@aws-sdk/lib-dynamodb');
-    mockDynamoDB = DynamoDBDocumentClient.from();
-  });
+    const signMessage = (message: string): string => {
+      const signature = crypto.sign(null, Buffer.from(message), privateKey);
+      return signature.toString('base64');
+    };
 
-  afterEach(() => {
-    jest.clearAllMocks();
-  });
+    return { did, signMessage };
+  };
 
-  describe('Complete message flow', () => {
-    it('should send message and retrieve it in list', async () => {
-      // Step 1: Send message from sender to receiver
-      const sendEvent: Partial<APIGatewayProxyEvent> = {
-        path: `/connections/${connectionId}/messages`,
-        httpMethod: 'POST',
-        body: JSON.stringify({ content: 'Hello, this is an e2e test!' }),
-        requestContext: {
-          authorizer: {
-            did: senderDid,
-          },
-        } as any,
-        headers: {},
-      };
+  const getJwtToken = async (did: string, signMessage: (msg: string) => string) => {
+    const challengeResponse = await axios.post(
+      CHALLENGE_URL,
+      { did },
+      {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+      }
+    );
 
-      mockDynamoDB.send.mockResolvedValueOnce({
-        Item: {
-          userId: senderDid,
-          connectionId: receiverDid,
-          status: 'CONNECTED',
+    const challenge = challengeResponse.data.challenge;
+    const signature = signMessage(challenge);
+
+    const tokenResponse = await axios.post(
+      TOKEN_URL,
+      {
+        did,
+        challenge,
+        signature,
+      },
+      {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+      }
+    );
+
+    return tokenResponse.data.access_token;
+  };
+
+  const registerAgent = async (did: string, signMessage: (msg: string) => string) => {
+    const metadata = { name: 'Test Agent' };
+    const message = JSON.stringify({ did, metadata });
+    const signature = signMessage(message);
+
+    await axios.post(
+      REGISTER_URL,
+      {
+        did,
+        signature,
+        metadata,
+      },
+      {
+        headers: { 'Content-Type': 'application/json' },
+        timeout: 10000,
+      }
+    );
+  };
+
+  const createConnection = async (
+    senderDid: string,
+    senderSign: (msg: string) => string,
+    receiverDid: string,
+    receiverSign: (msg: string) => string
+  ) => {
+    // Get tokens
+    const senderToken = await getJwtToken(senderDid, senderSign);
+    const receiverToken = await getJwtToken(receiverDid, receiverSign);
+
+    // Sender creates invitation
+    const invitationResponse = await axios.post(
+      INVITATIONS_URL,
+      {
+        targetDid: receiverDid,
+        expiresIn: 3600,
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${senderToken}`,
         },
-      });
+        timeout: 10000,
+      }
+    );
 
-      mockDynamoDB.send.mockResolvedValueOnce({
-        Items: [],
-      });
+    const invitationCode = invitationResponse.data.invitationCode;
 
-      mockDynamoDB.send.mockResolvedValueOnce({});
-
-      const sendResult = await sendHandler(sendEvent as APIGatewayProxyEvent);
-      expect(sendResult.statusCode).toBe(201);
-      const sendBody = JSON.parse(sendResult.body);
-      expect(sendBody.success).toBe(true);
-      expect(sendBody.messageId).toBeDefined();
-      const messageId = sendBody.messageId;
-
-      // Step 2: Receiver lists messages
-      const listEvent: Partial<APIGatewayProxyEvent> = {
-        path: `/connections/${connectionId}/messages`,
-        httpMethod: 'GET',
-        queryStringParameters: {},
-        requestContext: {
-          authorizer: {
-            did: receiverDid,
-          },
-        } as any,
-      };
-
-      mockDynamoDB.send.mockResolvedValueOnce({
-        Item: {
-          userId: receiverDid,
-          connectionId: senderDid,
-          status: 'CONNECTED',
+    // Receiver accepts invitation
+    const requestResponse = await axios.post(
+      REQUESTS_URL,
+      {
+        invitationCode,
+        senderDid,
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${receiverToken}`,
         },
-      });
+        timeout: 10000,
+      }
+    );
 
-      mockDynamoDB.send.mockResolvedValueOnce({
-        Items: [
-          {
-            messageId,
-            connectionId: receiverDid,
-            senderDid,
-            content: 'Hello, this is an e2e test!',
-            timestamp: '2024-01-15T10:00:00Z',
+    const requestId = requestResponse.data.requestId;
+
+    // Sender accepts request
+    await axios.post(
+      `${REQUESTS_URL}/${requestId}/accept`,
+      {},
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${senderToken}`,
+        },
+        timeout: 10000,
+      }
+    );
+
+    return { senderToken, receiverToken };
+  };
+
+  describe('Happy Path: Send Message', () => {
+    it('should successfully send a message between connected agents', async () => {
+      const { did: senderDid, signMessage: senderSign } = generateValidDid();
+      const { did: receiverDid, signMessage: receiverSign } = generateValidDid();
+
+      await registerAgent(senderDid, senderSign);
+      await registerAgent(receiverDid, receiverSign);
+
+      const { senderToken } = await createConnection(
+        senderDid,
+        senderSign,
+        receiverDid,
+        receiverSign
+      );
+
+      const messageResponse = await axios.post(
+        `${MESSAGES_URL}/${receiverDid}/messages`,
+        {
+          content: 'Hello, this is an E2E test message!',
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${senderToken}`,
           },
-        ],
-      });
+          timeout: 10000,
+        }
+      );
 
-      const listResult = await listHandler(listEvent as APIGatewayProxyEvent);
-      expect(listResult.statusCode).toBe(200);
-      const listBody = JSON.parse(listResult.body);
-      expect(listBody.messages).toHaveLength(1);
-      expect(listBody.messages[0].messageId).toBe(messageId);
-      expect(listBody.messages[0].content).toBe('Hello, this is an e2e test!');
-      expect(listBody.messages[0].senderDid).toBe(senderDid);
+      expect(messageResponse.status).toBe(201);
+      expect(messageResponse.data.success).toBe(true);
+      expect(messageResponse.data.messageId).toBeDefined();
     });
 
-    it('should handle multiple messages in sequence', async () => {
-      const messages = ['First message', 'Second message', 'Third message'];
+    it('should accept minimal message content', async () => {
+      const { did: senderDid, signMessage: senderSign } = generateValidDid();
+      const { did: receiverDid, signMessage: receiverSign } = generateValidDid();
 
-      const messageIds: string[] = [];
+      await registerAgent(senderDid, senderSign);
+      await registerAgent(receiverDid, receiverSign);
 
-      for (const content of messages) {
-        const sendEvent: Partial<APIGatewayProxyEvent> = {
-          path: `/connections/${connectionId}/messages`,
-          httpMethod: 'POST',
-          body: JSON.stringify({ content }),
-          requestContext: {
-            authorizer: {
-              did: senderDid,
-            },
-          } as any,
-          headers: {},
-        };
+      const { senderToken } = await createConnection(
+        senderDid,
+        senderSign,
+        receiverDid,
+        receiverSign
+      );
 
-        mockDynamoDB.send.mockResolvedValueOnce({
-          Item: {
-            userId: senderDid,
-            connectionId: receiverDid,
-            status: 'CONNECTED',
+      const messageResponse = await axios.post(
+        `${MESSAGES_URL}/${receiverDid}/messages`,
+        {
+          content: 'Hi',
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${senderToken}`,
           },
-        });
+          timeout: 10000,
+        }
+      );
 
-        mockDynamoDB.send.mockResolvedValueOnce({
-          Items: [],
-        });
+      expect(messageResponse.status).toBe(201);
+      expect(messageResponse.data.success).toBe(true);
+    });
+  });
 
-        mockDynamoDB.send.mockResolvedValueOnce({});
+  describe('Happy Path: List Messages', () => {
+    it('should list messages for a connection', async () => {
+      const { did: senderDid, signMessage: senderSign } = generateValidDid();
+      const { did: receiverDid, signMessage: receiverSign } = generateValidDid();
 
-        const result = await sendHandler(sendEvent as APIGatewayProxyEvent);
-        expect(result.statusCode).toBe(201);
-        const body = JSON.parse(result.body);
-        messageIds.push(body.messageId);
+      await registerAgent(senderDid, senderSign);
+      await registerAgent(receiverDid, receiverSign);
+
+      const { senderToken, receiverToken } = await createConnection(
+        senderDid,
+        senderSign,
+        receiverDid,
+        receiverSign
+      );
+
+      // Send a message
+      await axios.post(
+        `${MESSAGES_URL}/${receiverDid}/messages`,
+        {
+          content: 'Test message for listing',
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${senderToken}`,
+          },
+          timeout: 10000,
+        }
+      );
+
+      // List messages as receiver
+      const listResponse = await axios.get(`${MESSAGES_URL}/${senderDid}/messages`, {
+        headers: {
+          Authorization: `Bearer ${receiverToken}`,
+        },
+        timeout: 10000,
+      });
+
+      expect(listResponse.status).toBe(200);
+      expect(listResponse.data.messages).toBeDefined();
+      expect(listResponse.data.messages.length).toBeGreaterThan(0);
+    });
+
+    it('should support pagination with limit parameter', async () => {
+      const { did: senderDid, signMessage: senderSign } = generateValidDid();
+      const { did: receiverDid, signMessage: receiverSign } = generateValidDid();
+
+      await registerAgent(senderDid, senderSign);
+      await registerAgent(receiverDid, receiverSign);
+
+      const { senderToken, receiverToken } = await createConnection(
+        senderDid,
+        senderSign,
+        receiverDid,
+        receiverSign
+      );
+
+      // Send multiple messages
+      for (let i = 0; i < 3; i++) {
+        await axios.post(
+          `${MESSAGES_URL}/${receiverDid}/messages`,
+          {
+            content: `Message ${i + 1}`,
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${senderToken}`,
+            },
+            timeout: 10000,
+          }
+        );
       }
 
-      expect(messageIds).toHaveLength(3);
-      expect(new Set(messageIds).size).toBe(3); // All unique
-    });
-
-    it('should handle pagination for large message lists', async () => {
-      const listEvent: Partial<APIGatewayProxyEvent> = {
-        path: `/connections/${connectionId}/messages`,
-        httpMethod: 'GET',
-        queryStringParameters: {
-          limit: '2',
+      // List with limit=1
+      const listResponse = await axios.get(`${MESSAGES_URL}/${senderDid}/messages?limit=1`, {
+        headers: {
+          Authorization: `Bearer ${receiverToken}`,
         },
-        requestContext: {
-          authorizer: {
-            did: senderDid,
-          },
-        } as any,
-      };
-
-      mockDynamoDB.send.mockResolvedValueOnce({
-        Item: {
-          userId: senderDid,
-          connectionId: receiverDid,
-          status: 'CONNECTED',
-        },
+        timeout: 10000,
       });
 
-      mockDynamoDB.send.mockResolvedValueOnce({
-        Items: [
+      expect(listResponse.status).toBe(200);
+      expect(listResponse.data.messages).toHaveLength(1);
+    });
+  });
+
+  describe('Happy Path: Complete Message Flow', () => {
+    it('should send and retrieve messages in both directions', async () => {
+      const { did: senderDid, signMessage: senderSign } = generateValidDid();
+      const { did: receiverDid, signMessage: receiverSign } = generateValidDid();
+
+      await registerAgent(senderDid, senderSign);
+      await registerAgent(receiverDid, receiverSign);
+
+      const { senderToken, receiverToken } = await createConnection(
+        senderDid,
+        senderSign,
+        receiverDid,
+        receiverSign
+      );
+
+      // Sender sends message to receiver
+      const sendResponse = await axios.post(
+        `${MESSAGES_URL}/${receiverDid}/messages`,
+        {
+          content: 'Hello from sender!',
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${senderToken}`,
+          },
+          timeout: 10000,
+        }
+      );
+
+      expect(sendResponse.status).toBe(201);
+      const messageId = sendResponse.data.messageId;
+
+      // Receiver lists messages
+      const listResponse = await axios.get(`${MESSAGES_URL}/${senderDid}/messages`, {
+        headers: {
+          Authorization: `Bearer ${receiverToken}`,
+        },
+        timeout: 10000,
+      });
+
+      expect(listResponse.status).toBe(200);
+      const messages = listResponse.data.messages;
+      expect(messages.some((msg: any) => msg.messageId === messageId)).toBe(true);
+      expect(messages.some((msg: any) => msg.content === 'Hello from sender!')).toBe(true);
+    });
+  });
+
+  describe('Error Cases: Send Message', () => {
+    it('should return 401 for missing Authorization header', async () => {
+      const { did: receiverDid } = generateValidDid();
+
+      try {
+        await axios.post(
+          `${MESSAGES_URL}/${receiverDid}/messages`,
           {
-            messageId: 'msg_003',
-            connectionId: receiverDid,
-            senderDid: receiverDid,
-            content: 'Message 3',
-            timestamp: '2024-01-15T10:02:00Z',
+            content: 'Test message',
           },
           {
-            messageId: 'msg_002',
-            connectionId: receiverDid,
-            senderDid: senderDid,
-            content: 'Message 2',
-            timestamp: '2024-01-15T10:01:00Z',
-          },
-        ],
-        LastEvaluatedKey: {
-          receiverDid: senderDid,
-          timestamp: '2024-01-15T10:01:00Z',
-        },
-      });
-
-      const result = await listHandler(listEvent as APIGatewayProxyEvent);
-      expect(result.statusCode).toBe(200);
-      const body = JSON.parse(result.body);
-      expect(body.messages).toHaveLength(2);
-      expect(body.nextToken).toBeDefined();
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            timeout: 10000,
+          }
+        );
+        fail('Expected request to fail');
+      } catch (error: any) {
+        expect(error.response.status).toBe(401);
+      }
     });
 
-    it('should reject messages to non-existent connections', async () => {
-      const sendEvent: Partial<APIGatewayProxyEvent> = {
-        path: `/connections/did:key:nonexistent/messages`,
-        httpMethod: 'POST',
-        body: JSON.stringify({ content: 'Hello!' }),
-        requestContext: {
-          authorizer: {
-            did: senderDid,
+    it('should return 403 for unauthorized connection', async () => {
+      const { did: senderDid, signMessage: senderSign } = generateValidDid();
+      const { did: receiverDid, signMessage: receiverSign } = generateValidDid();
+      const { did: unauthorizedDid, signMessage: unauthorizedSign } = generateValidDid();
+
+      await registerAgent(senderDid, senderSign);
+      await registerAgent(receiverDid, receiverSign);
+      await registerAgent(unauthorizedDid, unauthorizedSign);
+
+      // Create connection between sender and receiver
+      await createConnection(senderDid, senderSign, receiverDid, receiverSign);
+
+      // Unauthorized user tries to send message
+      const unauthorizedToken = await getJwtToken(unauthorizedDid, unauthorizedSign);
+
+      try {
+        await axios.post(
+          `${MESSAGES_URL}/${receiverDid}/messages`,
+          {
+            content: 'Unauthorized message',
           },
-        } as any,
-        headers: {},
-      };
-
-      mockDynamoDB.send.mockResolvedValueOnce({
-        Item: null,
-      });
-
-      const result = await sendHandler(sendEvent as APIGatewayProxyEvent);
-      expect(result.statusCode).toBe(403);
-      const body = JSON.parse(result.body);
-      expect(body.error).toBe('You are not part of this connection');
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${unauthorizedToken}`,
+            },
+            timeout: 10000,
+          }
+        );
+        fail('Expected request to fail');
+      } catch (error: any) {
+        expect(error.response.status).toBe(403);
+      }
     });
 
+    it('should return 400 for empty message content', async () => {
+      const { did: senderDid, signMessage: senderSign } = generateValidDid();
+      const { did: receiverDid, signMessage: receiverSign } = generateValidDid();
+
+      await registerAgent(senderDid, senderSign);
+      await registerAgent(receiverDid, receiverSign);
+
+      const { senderToken } = await createConnection(
+        senderDid,
+        senderSign,
+        receiverDid,
+        receiverSign
+      );
+
+      try {
+        await axios.post(
+          `${MESSAGES_URL}/${receiverDid}/messages`,
+          {
+            content: '',
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${senderToken}`,
+            },
+            timeout: 10000,
+          }
+        );
+        fail('Expected request to fail');
+      } catch (error: any) {
+        expect(error.response.status).toBe(400);
+      }
+    });
+  });
+
+  describe('Error Cases: List Messages', () => {
+    it('should return 401 for missing Authorization header', async () => {
+      const { did: connectionId } = generateValidDid();
+
+      try {
+        await axios.get(`${MESSAGES_URL}/${connectionId}/messages`, {
+          timeout: 10000,
+        });
+        fail('Expected request to fail');
+      } catch (error: any) {
+        expect(error.response.status).toBe(401);
+      }
+    });
+
+    it('should return 403 for unauthorized connection', async () => {
+      const { did: senderDid, signMessage: senderSign } = generateValidDid();
+      const { did: receiverDid, signMessage: receiverSign } = generateValidDid();
+      const { did: unauthorizedDid, signMessage: unauthorizedSign } = generateValidDid();
+
+      await registerAgent(senderDid, senderSign);
+      await registerAgent(receiverDid, receiverSign);
+      await registerAgent(unauthorizedDid, unauthorizedSign);
+
+      // Create connection between sender and receiver
+      await createConnection(senderDid, senderSign, receiverDid, receiverSign);
+
+      // Unauthorized user tries to list messages
+      const unauthorizedToken = await getJwtToken(unauthorizedDid, unauthorizedSign);
+
+      try {
+        await axios.get(`${MESSAGES_URL}/${receiverDid}/messages`, {
+          headers: {
+            Authorization: `Bearer ${unauthorizedToken}`,
+          },
+          timeout: 10000,
+        });
+        fail('Expected request to fail');
+      } catch (error: any) {
+        expect(error.response.status).toBe(403);
+      }
+    });
+  });
+
+  describe('Edge Cases', () => {
     it('should handle empty message list', async () => {
-      const listEvent: Partial<APIGatewayProxyEvent> = {
-        path: `/connections/${connectionId}/messages`,
-        httpMethod: 'GET',
-        queryStringParameters: {},
-        requestContext: {
-          authorizer: {
-            did: senderDid,
-          },
-        } as any,
-      };
+      const { did: senderDid, signMessage: senderSign } = generateValidDid();
+      const { did: receiverDid, signMessage: receiverSign } = generateValidDid();
 
-      mockDynamoDB.send.mockResolvedValueOnce({
-        Item: {
-          userId: senderDid,
-          connectionId: receiverDid,
-          status: 'CONNECTED',
+      await registerAgent(senderDid, senderSign);
+      await registerAgent(receiverDid, receiverSign);
+
+      const { receiverToken } = await createConnection(
+        senderDid,
+        senderSign,
+        receiverDid,
+        receiverSign
+      );
+
+      // List messages without sending any
+      const listResponse = await axios.get(`${MESSAGES_URL}/${senderDid}/messages`, {
+        headers: {
+          Authorization: `Bearer ${receiverToken}`,
         },
+        timeout: 10000,
       });
 
-      mockDynamoDB.send.mockResolvedValueOnce({
-        Items: [],
-      });
+      expect(listResponse.status).toBe(200);
+      expect(listResponse.data.messages).toHaveLength(0);
+      expect(listResponse.data.nextToken).toBeUndefined();
+    });
 
-      const result = await listHandler(listEvent as APIGatewayProxyEvent);
-      expect(result.statusCode).toBe(200);
-      const body = JSON.parse(result.body);
-      expect(body.messages).toHaveLength(0);
-      expect(body.nextToken).toBeUndefined();
+    it('should handle large message content', async () => {
+      const { did: senderDid, signMessage: senderSign } = generateValidDid();
+      const { did: receiverDid, signMessage: receiverSign } = generateValidDid();
+
+      await registerAgent(senderDid, senderSign);
+      await registerAgent(receiverDid, receiverSign);
+
+      const { senderToken } = await createConnection(
+        senderDid,
+        senderSign,
+        receiverDid,
+        receiverSign
+      );
+
+      const largeContent = 'A'.repeat(1000);
+
+      const messageResponse = await axios.post(
+        `${MESSAGES_URL}/${receiverDid}/messages`,
+        {
+          content: largeContent,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${senderToken}`,
+          },
+          timeout: 10000,
+        }
+      );
+
+      expect(messageResponse.status).toBe(201);
+      expect(messageResponse.data.success).toBe(true);
+    });
+  });
+
+  describe('Security', () => {
+    it('should handle SQL injection attempt in message content', async () => {
+      const { did: senderDid, signMessage: senderSign } = generateValidDid();
+      const { did: receiverDid, signMessage: receiverSign } = generateValidDid();
+
+      await registerAgent(senderDid, senderSign);
+      await registerAgent(receiverDid, receiverSign);
+
+      const { senderToken } = await createConnection(
+        senderDid,
+        senderSign,
+        receiverDid,
+        receiverSign
+      );
+
+      const maliciousContent = "'; DROP TABLE messages; --";
+
+      const messageResponse = await axios.post(
+        `${MESSAGES_URL}/${receiverDid}/messages`,
+        {
+          content: maliciousContent,
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${senderToken}`,
+          },
+          timeout: 10000,
+        }
+      );
+
+      expect(messageResponse.status).toBe(201);
+      expect(messageResponse.data.success).toBe(true);
     });
   });
 });
