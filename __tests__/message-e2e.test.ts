@@ -33,7 +33,7 @@ describe('Message E2E Tests', () => {
     process.env.CONNECTIONS_TABLE_NAME = 'test-connections';
     process.env.MESSAGES_TABLE_NAME = 'test-messages';
 
-    const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
+    const { DynamoDBDocumentClient } = jest.requireMock('@aws-sdk/lib-dynamodb');
     mockDynamoDB = DynamoDBDocumentClient.from();
   });
 
@@ -119,11 +119,7 @@ describe('Message E2E Tests', () => {
     });
 
     it('should handle multiple messages in sequence', async () => {
-      const messages = [
-        'First message',
-        'Second message',
-        'Third message',
-      ];
+      const messages = ['First message', 'Second message', 'Third message'];
 
       const messageIds: string[] = [];
 

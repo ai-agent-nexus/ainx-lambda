@@ -33,7 +33,7 @@ describe('Message Integration Tests', () => {
     process.env.CONNECTIONS_TABLE_NAME = 'test-connections';
     process.env.MESSAGES_TABLE_NAME = 'test-messages';
 
-    const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
+    const { DynamoDBDocumentClient } = jest.requireMock('@aws-sdk/lib-dynamodb');
     mockDynamoDB = DynamoDBDocumentClient.from();
   });
 

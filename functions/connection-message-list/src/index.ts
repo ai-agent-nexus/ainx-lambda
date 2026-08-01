@@ -63,7 +63,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
 
     // Parse pagination parameters
-    const limit = Math.min(Math.max(parseInt(event.queryStringParameters?.limit || '20', 10), 1), 100);
+    const limit = Math.min(
+      Math.max(parseInt(event.queryStringParameters?.limit || '20', 10), 1),
+      100
+    );
     const nextToken = event.queryStringParameters?.nextToken;
 
     // Query messages where user is receiver

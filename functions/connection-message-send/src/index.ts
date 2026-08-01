@@ -1,9 +1,19 @@
 import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
+import {
+  DynamoDBDocumentClient,
+  GetCommand,
+  PutCommand,
+  QueryCommand,
+} from '@aws-sdk/lib-dynamodb';
 import { Logger } from '@ainx/logger';
-import { formatResponse, parseBody, validateInput } from '@ainx/shared-utils';
-import { generateMessageId, generateIdempotencyKey, isValidMessageContent, SendMessageRequest } from '@ainx/connection-utils';
+import { formatResponse, parseBody } from '@ainx/shared-utils';
+import {
+  generateMessageId,
+  generateIdempotencyKey,
+  isValidMessageContent,
+  SendMessageRequest,
+} from '@ainx/connection-utils';
 
 const logger = new Logger('connection-message-send');
 const client = new DynamoDBClient({});
@@ -76,7 +86,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     );
 
     if (!connectionResult.Item) {
-      logger.warn('Connection not found or user not part of connection', { senderDid, connectionId });
+      logger.warn('Connection not found or user not part of connection', {
+        senderDid,
+        connectionId,
+      });
       return formatResponse(403, {
         error: 'You are not part of this connection',
         code: 'NOT_AUTHORIZED',

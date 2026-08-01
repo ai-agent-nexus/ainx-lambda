@@ -50,7 +50,7 @@ describe('connection-message-send', () => {
     process.env.MESSAGES_TABLE_NAME = 'test-messages';
 
     // Get mock DynamoDB instance
-    const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
+    const { DynamoDBDocumentClient } = jest.requireMock('@aws-sdk/lib-dynamodb');
     mockDynamoDB = DynamoDBDocumentClient.from();
   });
 

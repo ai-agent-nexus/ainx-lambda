@@ -43,7 +43,7 @@ describe('connection-message-list', () => {
       } as any,
     };
 
-    const { DynamoDBDocumentClient } = require('@aws-sdk/lib-dynamodb');
+    const { DynamoDBDocumentClient } = jest.requireMock('@aws-sdk/lib-dynamodb');
     mockDynamoDB = DynamoDBDocumentClient.from();
   });
 
