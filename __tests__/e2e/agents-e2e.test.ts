@@ -1,7 +1,7 @@
 import axios from 'axios';
 import crypto from 'crypto';
 import { generateValidDid } from './utils/did';
-import { getJwtToken, REGISTER_URL, ROTATE_KEY_URL, REVOKE_URL } from './utils/auth';
+import { getJwtToken, REGISTER_URL, ROTATE_KEY_URL, AGENT_REVOKE_URL } from './utils/auth';
 
 /**
  * E2E Tests for Agent Management API
@@ -143,7 +143,7 @@ describe('E2E: Agent Management', () => {
       const jwtToken = await getJwtToken(did, signMessage);
 
       try {
-        const revokeResponse = await axios.delete(`${REVOKE_URL}/${did}`, {
+        const revokeResponse = await axios.delete(`${AGENT_REVOKE_URL}/${did}`, {
           headers: {
             Authorization: `Bearer ${jwtToken}`,
           },
@@ -584,7 +584,7 @@ describe('E2E: Agent Management', () => {
       const { did } = generateValidDid();
 
       try {
-        await axios.delete(`${REVOKE_URL}/${did}`, {
+        await axios.delete(`${AGENT_REVOKE_URL}/${did}`, {
           timeout: 10000,
         });
         throw new Error('Expected request to fail');
@@ -598,7 +598,7 @@ describe('E2E: Agent Management', () => {
       const { did } = generateValidDid();
 
       try {
-        await axios.delete(`${REVOKE_URL}/${did}`, {
+        await axios.delete(`${AGENT_REVOKE_URL}/${did}`, {
           headers: {
             Authorization: 'Bearer invalid-token',
           },
@@ -631,7 +631,7 @@ describe('E2E: Agent Management', () => {
       const { did: otherDid } = generateValidDid();
 
       try {
-        await axios.delete(`${REVOKE_URL}/${otherDid}`, {
+        await axios.delete(`${AGENT_REVOKE_URL}/${otherDid}`, {
           headers: {
             Authorization: `Bearer ${jwtToken}`,
           },

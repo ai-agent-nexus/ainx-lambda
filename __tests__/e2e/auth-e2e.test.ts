@@ -6,7 +6,7 @@ import {
   CHALLENGE_URL,
   TOKEN_URL,
   REFRESH_URL,
-  REVOKE_URL,
+  AUTH_REVOKE_URL,
 } from './utils/auth';
 
 /**
@@ -76,7 +76,7 @@ describe('E2E: Authentication Flow', () => {
 
       // Revoke token
       const revokeResponse = await axios.post(
-        REVOKE_URL,
+        AUTH_REVOKE_URL,
         { refresh_token: refreshToken },
         {
           headers: {
@@ -100,7 +100,7 @@ describe('E2E: Authentication Flow', () => {
 
       // Revoke without refresh token
       const revokeResponse = await axios.post(
-        REVOKE_URL,
+        AUTH_REVOKE_URL,
         {},
         {
           headers: {
@@ -395,7 +395,7 @@ describe('E2E: Authentication Flow', () => {
     it('should return 401 for missing Authorization header', async () => {
       try {
         await axios.post(
-          REVOKE_URL,
+          AUTH_REVOKE_URL,
           {},
           {
             headers: { 'Content-Type': 'application/json' },
@@ -412,7 +412,7 @@ describe('E2E: Authentication Flow', () => {
     it('should return 403 for invalid token', async () => {
       try {
         await axios.post(
-          REVOKE_URL,
+          AUTH_REVOKE_URL,
           {},
           {
             headers: {
