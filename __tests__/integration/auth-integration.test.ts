@@ -1,7 +1,3 @@
-import { handler as challengeHandler } from '../../functions/auth-challenge/src/index';
-import { handler as tokenHandler } from '../../functions/auth-token/src/index';
-import { handler as refreshHandler } from '../../functions/auth-refresh/src/index';
-import { handler as revokeHandler } from '../../functions/auth-revoke/src/index';
 import { dynamoDBState, clearDynamoDBState, mockSend, createAuthMockSend } from './utils/dynamodb';
 import { createEvent, setupTestEnv } from './utils/helpers';
 import './utils/mocks';
@@ -16,23 +12,28 @@ setupTestEnv({
 MIIEpAIBAAKCAQEA0Z3VS5JJcds3xfn/ygWyF8PbnGy0AHB7MhgwMbRvI0MBZhpI
 A7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9
 j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
-9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
+9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
 9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
 9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
 -----END RSA PRIVATE KEY-----`,
   JWT_PUBLIC_KEY: `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0Z3VS5JJcds3xfn/ygWy
 F8PbnGy0AHB7MhgwMbRvI0MBZhpIA7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j
-9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
-9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
-9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
-9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
+9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
+9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
+9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
+9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
 -----END PUBLIC KEY-----`,
   JWT_ISSUER: 'ainx-api',
   JWT_EXPIRES_IN_SECONDS: '3600',
   REFRESH_TOKEN_TTL_DAYS: '7',
   BLACKLIST_TTL_SECONDS: '3600',
 });
+
+import { handler as challengeHandler } from '../../functions/auth-challenge/src/index';
+import { handler as tokenHandler } from '../../functions/auth-token/src/index';
+import { handler as refreshHandler } from '../../functions/auth-refresh/src/index';
+import { handler as revokeHandler } from '../../functions/auth-revoke/src/index';
 
 // Mock jsonwebtoken sign function
 jest.mock('jsonwebtoken', () => ({

@@ -1,15 +1,19 @@
-process.env.CONNECTIONS_TABLE_NAME = 'test-connections-table';
-process.env.CONNECTION_REQUESTS_TABLE_NAME = 'test-connection-requests-table';
-process.env.INVITATIONS_TABLE_NAME = 'test-invitations-table';
-process.env.AGENT_REGISTRATION_TABLE_NAME = 'test-agent-registration-table';
+import { setupTestEnv } from './utils/helpers';
+
+setupTestEnv({
+  CONNECTIONS_TABLE_NAME: 'test-connections-table',
+  CONNECTION_REQUESTS_TABLE_NAME: 'test-connection-requests-table',
+  INVITATIONS_TABLE_NAME: 'test-invitations-table',
+  AGENT_REGISTRATION_TABLE_NAME: 'test-agent-registration-table',
+});
 
 import { APIGatewayProxyEvent } from 'aws-lambda';
-import { handler as createInvitationHandler } from '../functions/connection-create-invitation/src/index';
-import { handler as sendRequestHandler } from '../functions/connection-send-request/src/index';
-import { handler as acceptRequestHandler } from '../functions/connection-accept-request/src/index';
-import { handler as rejectHandler } from '../functions/connection-accept-request/src/reject';
-import { handler as listConnectionsHandler } from '../functions/connection-list-connections/src/index';
-import { handler as removeConnectionHandler } from '../functions/connection-remove-connection/src/index';
+import { handler as createInvitationHandler } from '../../functions/connection-create-invitation/src/index';
+import { handler as sendRequestHandler } from '../../functions/connection-send-request/src/index';
+import { handler as acceptRequestHandler } from '../../functions/connection-accept-request/src/index';
+import { handler as rejectHandler } from '../../functions/connection-accept-request/src/reject';
+import { handler as listConnectionsHandler } from '../../functions/connection-list-connections/src/index';
+import { handler as removeConnectionHandler } from '../../functions/connection-remove-connection/src/index';
 
 jest.mock('@ainx/logger');
 

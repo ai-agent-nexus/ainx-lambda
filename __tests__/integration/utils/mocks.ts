@@ -50,6 +50,7 @@ jest.mock('@ainx/crypto-utils', () => ({
 }));
 
 jest.mock('jsonwebtoken', () => ({
+  sign: jest.fn(() => 'mock-jwt-access-token'),
   verify: jest.fn(() => ({
     sub: 'test-user-id',
     did: 'did:key:z6MkqRYVCQrFkje3KMtcrA7gSfgD4EC2wEZptKfHTEr8J7CZ',

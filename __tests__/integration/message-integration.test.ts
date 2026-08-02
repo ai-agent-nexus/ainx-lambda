@@ -1,9 +1,13 @@
-process.env.CONNECTIONS_TABLE_NAME = 'test-connections-table';
-process.env.MESSAGES_TABLE_NAME = 'test-messages-table';
+import { setupTestEnv } from './utils/helpers';
+
+setupTestEnv({
+  CONNECTIONS_TABLE_NAME: 'test-connections-table',
+  MESSAGES_TABLE_NAME: 'test-messages-table',
+});
 
 import { APIGatewayProxyEvent } from 'aws-lambda';
-import { handler as sendHandler } from '../functions/connection-message-send/src/index';
-import { handler as listHandler } from '../functions/connection-message-list/src/index';
+import { handler as sendHandler } from '../../functions/connection-message-send/src/index';
+import { handler as listHandler } from '../../functions/connection-message-list/src/index';
 
 // Mock dependencies
 jest.mock('@ainx/logger');

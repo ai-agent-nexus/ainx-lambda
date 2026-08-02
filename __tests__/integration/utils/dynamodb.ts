@@ -46,22 +46,26 @@ jest.mock('@aws-sdk/client-dynamodb', () => ({
 }));
 
 // Mock DynamoDB document client with in-memory storage
-jest.mock('@aws-sdk/lib-dynamodb', () => ({
-  DynamoDBDocumentClient: {
-    from: jest.fn(() => ({
-      send: (...args: unknown[]) => mockSend(...args),
-    })),
-  },
-  GetCommand: jest.fn((params) => params),
-  QueryCommand: jest.fn((params) => params),
-  PutCommand: jest.fn((params) => params),
-  UpdateCommand: jest.fn((params) => params),
-  DeleteCommand: jest.fn((params) => {
-    markAsDelete(params);
-    return params;
-  }),
-  TransactWriteCommand: jest.fn((params) => params),
-}));
+jest.mock('@aws-sdk/lib-dynamodb', () => {
+  const actual = jest.requireActual('@aws-sdk/lib-dynamodb');
+  return {
+    ...actual,
+    DynamoDBDocumentClient: {
+      from: jest.fn(() => ({
+        send: (...args: unknown[]) => mockSend(...args),
+      })),
+    },
+    GetCommand: jest.fn((params) => params),
+    QueryCommand: jest.fn((params) => params),
+    PutCommand: jest.fn((params) => params),
+    UpdateCommand: jest.fn((params) => params),
+    DeleteCommand: jest.fn((params) => {
+      markAsDelete(params);
+      return params;
+    }),
+    TransactWriteCommand: jest.fn((params) => params),
+  };
+});
 
 /**
  * Create a standard mockSend implementation for agent-related tests
@@ -69,14 +73,45 @@ jest.mock('@aws-sdk/lib-dynamodb', () => ({
 export function createAgentMockSend(): typeof mockSend {
   return jest.fn((command: unknown) => {
     const cmd = command as {
-      TableName: string;
+      input?: {
+        TransactItems?: Array<{
+          Put?: {
+            TableName: string;
+            Item: Record<string, unknown>;
+            ConditionExpression?: string;
+          };
+        }>;
+      };
+      TableName?: string;
       Key?: Record<string, unknown>;
       Item?: Record<string, unknown>;
       ExpressionAttributeValues?: Record<string, unknown>;
       ConditionExpression?: string;
     };
 
-    if (cmd.TableName.includes('agent-registration')) {
+    if (cmd.input?.TransactItems) {
+      for (const item of cmd.input.TransactItems) {
+        if (item.Put) {
+          const put = item.Put;
+          if (put.TableName.includes('did-uniqueness')) {
+            if (put.ConditionExpression?.includes('attribute_not_exists')) {
+              if (dynamoDBState.didUniqueness.has(put.Item.did as string)) {
+                const error = new Error('ConditionalCheckFailedException');
+                error.name = 'ConditionalCheckFailedException';
+                return Promise.reject(error);
+              }
+            }
+            dynamoDBState.didUniqueness.set(put.Item.did as string, put.Item);
+          }
+          if (put.TableName.includes('agent-registration')) {
+            dynamoDBState.agents.set(put.Item.did as string, put.Item);
+          }
+        }
+      }
+      return Promise.resolve({});
+    }
+
+    if (cmd.TableName?.includes('agent-registration')) {
       if (cmd.ExpressionAttributeValues?.[':did']) {
         const did = cmd.ExpressionAttributeValues[':did'] as string;
         const items: Array<Record<string, unknown>> = [];
@@ -99,7 +134,7 @@ export function createAgentMockSend(): typeof mockSend {
       }
     }
 
-    if (cmd.TableName.includes('did-uniqueness')) {
+    if (cmd.TableName?.includes('did-uniqueness')) {
       if (cmd.Key) {
         const did = cmd.Key.did as string;
         const item = dynamoDBState.didUniqueness.get(did);
@@ -118,7 +153,7 @@ export function createAgentMockSend(): typeof mockSend {
       }
     }
 
-    if (cmd.TableName.includes('refresh-token')) {
+    if (cmd.TableName?.includes('refresh-token')) {
       if (cmd.Key) {
         const token = cmd.Key.token as string;
         const item = dynamoDBState.refreshTokens.get(token);
@@ -133,7 +168,7 @@ export function createAgentMockSend(): typeof mockSend {
       }
     }
 
-    if (cmd.TableName.includes('nonce')) {
+    if (cmd.TableName?.includes('nonce')) {
       if (cmd.Key) {
         const nonce = cmd.Key.nonce as string;
         const item = dynamoDBState.nonces.get(nonce);
@@ -178,12 +213,13 @@ export function createAuthMockSend(): typeof mockSend {
 
     if (cmd.TransactItems) {
       for (const item of cmd.TransactItems) {
-        if (item.Delete && item.Delete.TableName.includes('refresh-token')) {
-          const token = item.Delete.Key.token as string;
-          dynamoDBState.refreshTokens.delete(token);
-        }
-        if (item.Put && item.Put.TableName.includes('refresh-token')) {
-          dynamoDBState.refreshTokens.set(item.Put.Item.token as string, item.Put.Item);
+        if (item.Put) {
+          if (item.Put.TableName.includes('agent-registration')) {
+            dynamoDBState.agents.set(item.Put.Item.did as string, item.Put.Item);
+          }
+          if (item.Put.TableName.includes('did-uniqueness')) {
+            dynamoDBState.didUniqueness.set(item.Put.Item.did as string, item.Put.Item);
+          }
         }
       }
       return Promise.resolve({});
