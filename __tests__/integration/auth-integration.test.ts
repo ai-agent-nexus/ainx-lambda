@@ -1,231 +1,40 @@
-process.env.CHALLENGE_TABLE_NAME = 'test-challenge-table';
-process.env.AGENT_REGISTRATION_TABLE_NAME = 'test-agent-registration-table';
-process.env.REFRESH_TOKEN_TABLE_NAME = 'test-refresh-token-table';
-process.env.TOKEN_BLACKLIST_TABLE_NAME = 'test-token-blacklist-table';
-process.env.JWT_PRIVATE_KEY = `-----BEGIN RSA PRIVATE KEY-----
+import { handler as challengeHandler } from '../../functions/auth-challenge/src/index';
+import { handler as tokenHandler } from '../../functions/auth-token/src/index';
+import { handler as refreshHandler } from '../../functions/auth-refresh/src/index';
+import { handler as revokeHandler } from '../../functions/auth-revoke/src/index';
+import { dynamoDBState, clearDynamoDBState, mockSend, createAuthMockSend } from './utils/dynamodb';
+import { createEvent, setupTestEnv } from './utils/helpers';
+import './utils/mocks';
+
+// Setup environment variables before importing handlers
+setupTestEnv({
+  CHALLENGE_TABLE_NAME: 'test-challenge-table',
+  AGENT_REGISTRATION_TABLE_NAME: 'test-agent-registration-table',
+  REFRESH_TOKEN_TABLE_NAME: 'test-refresh-token-table',
+  TOKEN_BLACKLIST_TABLE_NAME: 'test-token-blacklist-table',
+  JWT_PRIVATE_KEY: `-----BEGIN RSA PRIVATE KEY-----
 MIIEpAIBAAKCAQEA0Z3VS5JJcds3xfn/ygWyF8PbnGy0AHB7MhgwMbRvI0MBZhpI
 A7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9
-j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
+j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
+9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
 9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
 9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
-9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
-9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
------END RSA PRIVATE KEY-----`;
-process.env.JWT_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
+-----END RSA PRIVATE KEY-----`,
+  JWT_PUBLIC_KEY: `-----BEGIN PUBLIC KEY-----
 MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0Z3VS5JJcds3xfn/ygWy
 F8PbnGy0AHB7MhgwMbRvI0MBZhpIA7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j
+9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
 9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
 9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
 9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
-9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
------END PUBLIC KEY-----`;
-process.env.JWT_ISSUER = 'ainx-api';
-process.env.JWT_EXPIRES_IN_SECONDS = '3600';
-process.env.REFRESH_TOKEN_TTL_DAYS = '7';
-
-import { APIGatewayProxyEvent } from 'aws-lambda';
-import { handler as challengeHandler } from '../functions/auth-challenge/src/index';
-import { handler as tokenHandler } from '../functions/auth-token/src/index';
-import { handler as refreshHandler } from '../functions/auth-refresh/src/index';
-import { handler as revokeHandler } from '../functions/auth-revoke/src/index';
-
-// Mock dependencies
-jest.mock('@ainx/logger');
-
-jest.mock('@ainx/shared-utils', () => ({
-  formatResponse: jest.fn((statusCode: number, body: Record<string, unknown>) => ({
-    statusCode,
-    headers: {
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Credentials': 'true',
-    },
-    body: JSON.stringify(body),
-  })),
-  validateInput: jest.fn((input: Record<string, unknown>, requiredFields: string[]) => {
-    const missingFields = requiredFields.filter((field) => !input[field]);
-    return {
-      valid: missingFields.length === 0,
-      missingFields,
-    };
-  }),
-  parseBody: jest.fn((body: string | null) => {
-    if (!body) return null;
-    try {
-      return JSON.parse(body);
-    } catch {
-      return null;
-    }
-  }),
-}));
-
-jest.mock('@ainx/did-utils', () => ({
-  parseDidKey: jest.fn((did: string) => {
-    if (!did || !did.startsWith('did:key:')) {
-      throw new Error('Invalid DID format');
-    }
-    return {
-      method: 'key',
-      publicKey: Buffer.from('a'.repeat(32)),
-      keyType: 'ed25519',
-    };
-  }),
-}));
-
-jest.mock('@ainx/crypto-utils', () => ({
-  verifySignature: jest.fn((_publicKey: Buffer, message: string, signature: Buffer) => {
-    // For testing, accept any signature for valid messages
-    return signature.length > 0 && message.length > 0;
-  }),
-}));
-
-// Track DynamoDB state for integration tests
-const dynamoDBState = {
-  challenges: new Map<string, unknown>(),
-  agents: new Map<string, unknown>(),
-  refreshTokens: new Map<string, unknown>(),
-  tokenBlacklist: new Map<string, unknown>(),
-};
-
-const deleteCommands = new WeakSet<object>();
-
-function markAsDelete(command: unknown): void {
-  if (command !== null && typeof command === 'object') {
-    deleteCommands.add(command);
-  }
-}
-
-const mockSend = jest.fn((command: unknown) => {
-  const cmd = command as {
-    TableName: string;
-    Key?: Record<string, unknown>;
-    Item?: Record<string, unknown>;
-    ExpressionAttributeValues?: Record<string, unknown>;
-    ConditionExpression?: string;
-    TransactItems?: Array<{
-      Put?: { TableName: string; Item: Record<string, unknown> };
-      Delete?: { TableName: string; Key: Record<string, unknown> };
-    }>;
-  };
-
-  const isDelete = command !== null && typeof command === 'object' && deleteCommands.has(command);
-
-  if (cmd.TransactItems) {
-    for (const item of cmd.TransactItems) {
-      if (item.Delete && item.Delete.TableName.includes('refresh-token')) {
-        const token = item.Delete.Key.token as string;
-        dynamoDBState.refreshTokens.delete(token);
-      }
-      if (item.Put && item.Put.TableName.includes('refresh-token')) {
-        dynamoDBState.refreshTokens.set(item.Put.Item.token as string, item.Put.Item);
-      }
-    }
-    return Promise.resolve({});
-  }
-
-  if (cmd.TableName.includes('challenge')) {
-    if (cmd.Item) {
-      if (cmd.ConditionExpression?.includes('attribute_not_exists')) {
-        if (dynamoDBState.challenges.has(cmd.Item.did as string)) {
-          const error = new Error('ConditionalCheckFailedException');
-          error.name = 'ConditionalCheckFailedException';
-          return Promise.reject(error);
-        }
-      }
-      dynamoDBState.challenges.set(cmd.Item.did as string, cmd.Item);
-      return Promise.resolve({});
-    }
-    if (cmd.Key) {
-      const did = cmd.Key.did as string;
-      const item = dynamoDBState.challenges.get(did);
-      if (isDelete) {
-        dynamoDBState.challenges.delete(did);
-      }
-      return Promise.resolve({ Item: item });
-    }
-  }
-
-  if (cmd.TableName.includes('agent-registration')) {
-    if (cmd.ExpressionAttributeValues?.[':did']) {
-      const did = cmd.ExpressionAttributeValues[':did'] as string;
-      const items: Array<Record<string, unknown>> = [];
-      for (const [, item] of dynamoDBState.agents) {
-        const agentItem = item as Record<string, unknown>;
-        if (agentItem.did === did && agentItem.status === 'active') {
-          items.push(agentItem);
-        }
-      }
-      return Promise.resolve({ Items: items });
-    }
-    if (cmd.Key) {
-      const did = cmd.Key.did as string;
-      const item = dynamoDBState.agents.get(did);
-      return Promise.resolve({ Item: item });
-    }
-    if (cmd.Item) {
-      dynamoDBState.agents.set(cmd.Item.did as string, cmd.Item);
-      return Promise.resolve({});
-    }
-  }
-
-  if (cmd.TableName.includes('refresh-token')) {
-    if (cmd.Key) {
-      const token = cmd.Key.token as string;
-      const item = dynamoDBState.refreshTokens.get(token);
-      if (isDelete) {
-        dynamoDBState.refreshTokens.delete(token);
-      }
-      return Promise.resolve({ Item: item });
-    }
-    if (cmd.Item) {
-      dynamoDBState.refreshTokens.set(cmd.Item.token as string, cmd.Item);
-      return Promise.resolve({});
-    }
-    if (cmd.ExpressionAttributeValues?.[':userId']) {
-      const userId = cmd.ExpressionAttributeValues[':userId'] as string;
-      const tokens: Array<Record<string, unknown>> = [];
-      for (const [, item] of dynamoDBState.refreshTokens) {
-        const tokenItem = item as Record<string, unknown>;
-        if (tokenItem.userId === userId) {
-          tokens.push(tokenItem);
-        }
-      }
-      return Promise.resolve({ Items: tokens });
-    }
-  }
-
-  if (cmd.TableName.includes('token-blacklist')) {
-    if (cmd.Item) {
-      dynamoDBState.tokenBlacklist.set(cmd.Item.jti as string, cmd.Item);
-      return Promise.resolve({});
-    }
-  }
-
-  return Promise.resolve({});
+-----END PUBLIC KEY-----`,
+  JWT_ISSUER: 'ainx-api',
+  JWT_EXPIRES_IN_SECONDS: '3600',
+  REFRESH_TOKEN_TTL_DAYS: '7',
+  BLACKLIST_TTL_SECONDS: '3600',
 });
 
-jest.mock('@aws-sdk/client-dynamodb', () => ({
-  DynamoDBClient: jest.fn(() => ({})),
-}));
-
-jest.mock('@aws-sdk/lib-dynamodb', () => ({
-  DynamoDBDocumentClient: {
-    from: jest.fn(() => ({
-      send: (command: unknown) => mockSend(command),
-    })),
-  },
-  GetCommand: jest.fn((params) => params),
-  QueryCommand: jest.fn((params) => params),
-  PutCommand: jest.fn((params) => params),
-  UpdateCommand: jest.fn((params) => params),
-  DeleteCommand: jest.fn((params) => {
-    const cmd = { ...params };
-    markAsDelete(cmd);
-    return cmd;
-  }),
-  TransactWriteCommand: jest.fn((params) => params),
-}));
-
+// Mock jsonwebtoken sign function
 jest.mock('jsonwebtoken', () => ({
   sign: jest.fn(() => 'mock-jwt-access-token'),
   verify: jest.fn(() => ({
@@ -256,45 +65,11 @@ describe('Integration: Authentication Flow', () => {
 
   beforeEach(() => {
     // Clear all DynamoDB state before each test
-    dynamoDBState.challenges.clear();
-    dynamoDBState.agents.clear();
-    dynamoDBState.refreshTokens.clear();
-    dynamoDBState.tokenBlacklist.clear();
+    clearDynamoDBState();
 
-    // Setup environment variables
-    process.env.CHALLENGE_TABLE_NAME = 'test-challenge-table';
-    process.env.AGENT_REGISTRATION_TABLE_NAME = 'test-agent-registration-table';
-    process.env.REFRESH_TOKEN_TABLE_NAME = 'test-refresh-token-table';
-    process.env.TOKEN_BLACKLIST_TABLE_NAME = 'test-token-blacklist-table';
-    process.env.JWT_PRIVATE_KEY = `-----BEGIN RSA PRIVATE KEY-----
-MIIEpAIBAAKCAQEA0Z3VS5JJcds3xfn/ygWyF8PbnGy0AHB7MhgwMbRvI0MBZhpI
-A7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9
-j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
-9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
-9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
-9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
-9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
------END RSA PRIVATE KEY-----`;
-    process.env.JWT_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0Z3VS5JJcds3xfn/ygWy
-F8PbnGy0AHB7MhgwMbRvI0MBZhpIA7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j
-9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
-9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
-9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
-9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
-9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
------END PUBLIC KEY-----`;
-    process.env.JWT_PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
-MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA0Z3VS5JJcds3xfn/ygWy
-F8PbnGy0AHB7MhgwMbRvI0MBZhpIA7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j
-9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
-9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
-9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
-9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j9j
------END PUBLIC KEY-----`;
-    process.env.JWT_EXPIRES_IN_SECONDS = '3600';
-    process.env.REFRESH_TOKEN_TTL_DAYS = '7';
-    process.env.BLACKLIST_TTL_SECONDS = '3600';
+    // Setup mockSend with auth-specific implementation
+    const authMockSend = createAuthMockSend();
+    mockSend.mockImplementation(authMockSend);
   });
 
   afterEach(() => {
@@ -304,13 +79,13 @@ F8PbnGy0AHB7MhgwMbRvI0MBZhpIA7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j
   describe('Full auth flow with shared state', () => {
     it('should handle complete challenge -> token -> refresh -> revoke flow', async () => {
       // Step 1: Generate challenge
-      const challengeEvent: Partial<APIGatewayProxyEvent> = {
+      const challengeEvent = createEvent({
         path: '/auth/challenge',
         httpMethod: 'POST',
         body: JSON.stringify({ did: validDid }),
-      };
+      });
 
-      const challengeResult = await challengeHandler(challengeEvent as APIGatewayProxyEvent);
+      const challengeResult = await challengeHandler(challengeEvent);
       expect(challengeResult.statusCode).toBe(200);
       const challengeBody = JSON.parse(challengeResult.body);
       expect(challengeBody.challenge).toBeDefined();
@@ -331,7 +106,7 @@ F8PbnGy0AHB7MhgwMbRvI0MBZhpIA7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j
       });
 
       // Step 3: Get token
-      const tokenEvent: Partial<APIGatewayProxyEvent> = {
+      const tokenEvent = createEvent({
         path: '/auth/token',
         httpMethod: 'POST',
         body: JSON.stringify({
@@ -339,9 +114,9 @@ F8PbnGy0AHB7MhgwMbRvI0MBZhpIA7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j
           challenge: challengeBody.challenge,
           signature: 'valid-signature',
         }),
-      };
+      });
 
-      const tokenResult = await tokenHandler(tokenEvent as APIGatewayProxyEvent);
+      const tokenResult = await tokenHandler(tokenEvent);
       expect(tokenResult.statusCode).toBe(200);
       const tokenBody = JSON.parse(tokenResult.body);
       expect(tokenBody.access_token).toBeDefined();
@@ -351,11 +126,11 @@ F8PbnGy0AHB7MhgwMbRvI0MBZhpIA7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j
       expect(dynamoDBState.challenges.has(validDid)).toBe(false);
 
       // Step 4: Refresh token
-      const refreshEvent: Partial<APIGatewayProxyEvent> = {
+      const refreshEvent = createEvent({
         path: '/auth/refresh',
         httpMethod: 'POST',
         body: JSON.stringify({ refresh_token: tokenBody.refresh_token }),
-      };
+      });
 
       // Store refresh token in shared state
       dynamoDBState.refreshTokens.set(tokenBody.refresh_token, {
@@ -367,23 +142,23 @@ F8PbnGy0AHB7MhgwMbRvI0MBZhpIA7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j
         isRevoked: false,
       });
 
-      const refreshResult = await refreshHandler(refreshEvent as APIGatewayProxyEvent);
+      const refreshResult = await refreshHandler(refreshEvent);
       expect(refreshResult.statusCode).toBe(200);
       const refreshBody = JSON.parse(refreshResult.body);
       expect(refreshBody.access_token).toBeDefined();
       expect(refreshBody.refresh_token).toBeDefined();
 
       // Step 5: Revoke token
-      const revokeEvent: Partial<APIGatewayProxyEvent> = {
+      const revokeEvent = createEvent({
         path: '/auth/revoke',
         httpMethod: 'POST',
         headers: {
           Authorization: `Bearer ${tokenBody.access_token}`,
         },
         body: JSON.stringify({ refresh_token: refreshBody.refresh_token }),
-      };
+      });
 
-      const revokeResult = await revokeHandler(revokeEvent as APIGatewayProxyEvent);
+      const revokeResult = await revokeHandler(revokeEvent);
       expect(revokeResult.statusCode).toBe(200);
       const revokeBody = JSON.parse(revokeResult.body);
       expect(revokeBody.message).toBe('Token revoked successfully');
@@ -391,13 +166,13 @@ F8PbnGy0AHB7MhgwMbRvI0MBZhpIA7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j
 
     it('should fail token request with reused challenge', async () => {
       // Generate challenge
-      const challengeEvent: Partial<APIGatewayProxyEvent> = {
+      const challengeEvent = createEvent({
         path: '/auth/challenge',
         httpMethod: 'POST',
         body: JSON.stringify({ did: validDid }),
-      };
+      });
 
-      const challengeResult = await challengeHandler(challengeEvent as APIGatewayProxyEvent);
+      const challengeResult = await challengeHandler(challengeEvent);
       const challengeBody = JSON.parse(challengeResult.body);
 
       // Setup agent
@@ -412,7 +187,7 @@ F8PbnGy0AHB7MhgwMbRvI0MBZhpIA7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j
       });
 
       // First token request (should succeed)
-      const tokenEvent: Partial<APIGatewayProxyEvent> = {
+      const tokenEvent = createEvent({
         path: '/auth/token',
         httpMethod: 'POST',
         body: JSON.stringify({
@@ -420,13 +195,13 @@ F8PbnGy0AHB7MhgwMbRvI0MBZhpIA7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j
           challenge: challengeBody.challenge,
           signature: 'valid-signature',
         }),
-      };
+      });
 
-      const tokenResult1 = await tokenHandler(tokenEvent as APIGatewayProxyEvent);
+      const tokenResult1 = await tokenHandler(tokenEvent);
       expect(tokenResult1.statusCode).toBe(200);
 
       // Second token request with same challenge (should fail)
-      const tokenResult2 = await tokenHandler(tokenEvent as APIGatewayProxyEvent);
+      const tokenResult2 = await tokenHandler(tokenEvent);
       expect(tokenResult2.statusCode).toBe(400);
       const tokenBody2 = JSON.parse(tokenResult2.body);
       expect(tokenBody2.code).toBe('INVALID_CHALLENGE');
@@ -455,13 +230,13 @@ F8PbnGy0AHB7MhgwMbRvI0MBZhpIA7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j
         isRevoked: true,
       });
 
-      const refreshEvent: Partial<APIGatewayProxyEvent> = {
+      const refreshEvent = createEvent({
         path: '/auth/refresh',
         httpMethod: 'POST',
         body: JSON.stringify({ refresh_token: refreshToken }),
-      };
+      });
 
-      const refreshResult = await refreshHandler(refreshEvent as APIGatewayProxyEvent);
+      const refreshResult = await refreshHandler(refreshEvent);
       expect(refreshResult.statusCode).toBe(401);
       const refreshBody = JSON.parse(refreshResult.body);
       expect(refreshBody.code).toBe('INVALID_REFRESH_TOKEN');
@@ -490,13 +265,13 @@ F8PbnGy0AHB7MhgwMbRvI0MBZhpIA7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j
         isRevoked: false,
       });
 
-      const refreshEvent: Partial<APIGatewayProxyEvent> = {
+      const refreshEvent = createEvent({
         path: '/auth/refresh',
         httpMethod: 'POST',
         body: JSON.stringify({ refresh_token: refreshToken }),
-      };
+      });
 
-      const refreshResult = await refreshHandler(refreshEvent as APIGatewayProxyEvent);
+      const refreshResult = await refreshHandler(refreshEvent);
       expect(refreshResult.statusCode).toBe(401);
       const refreshBody = JSON.parse(refreshResult.body);
       expect(refreshBody.code).toBe('INVALID_REFRESH_TOKEN');
@@ -504,13 +279,13 @@ F8PbnGy0AHB7MhgwMbRvI0MBZhpIA7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j
 
     it('should fail token request for revoked agent', async () => {
       // Generate challenge
-      const challengeEvent: Partial<APIGatewayProxyEvent> = {
+      const challengeEvent = createEvent({
         path: '/auth/challenge',
         httpMethod: 'POST',
         body: JSON.stringify({ did: validDid }),
-      };
+      });
 
-      const challengeResult = await challengeHandler(challengeEvent as APIGatewayProxyEvent);
+      const challengeResult = await challengeHandler(challengeEvent);
       const challengeBody = JSON.parse(challengeResult.body);
 
       // Setup revoked agent
@@ -525,7 +300,7 @@ F8PbnGy0AHB7MhgwMbRvI0MBZhpIA7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j
         revokedAt: new Date().toISOString(),
       });
 
-      const tokenEvent: Partial<APIGatewayProxyEvent> = {
+      const tokenEvent = createEvent({
         path: '/auth/token',
         httpMethod: 'POST',
         body: JSON.stringify({
@@ -533,9 +308,9 @@ F8PbnGy0AHB7MhgwMbRvI0MBZhpIA7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j
           challenge: challengeBody.challenge,
           signature: 'valid-signature',
         }),
-      };
+      });
 
-      const tokenResult = await tokenHandler(tokenEvent as APIGatewayProxyEvent);
+      const tokenResult = await tokenHandler(tokenEvent);
       expect(tokenResult.statusCode).toBe(401);
       const tokenBody = JSON.parse(tokenResult.body);
       expect(tokenBody.code).toBe('DID_NOT_FOUND');
@@ -544,13 +319,13 @@ F8PbnGy0AHB7MhgwMbRvI0MBZhpIA7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j
 
   describe('Challenge state management', () => {
     it('should store challenge with correct structure', async () => {
-      const challengeEvent: Partial<APIGatewayProxyEvent> = {
+      const challengeEvent = createEvent({
         path: '/auth/challenge',
         httpMethod: 'POST',
         body: JSON.stringify({ did: validDid }),
-      };
+      });
 
-      await challengeHandler(challengeEvent as APIGatewayProxyEvent);
+      await challengeHandler(challengeEvent);
 
       const storedItem = dynamoDBState.challenges.get(validDid) as Record<string, unknown>;
       expect(storedItem).toMatchObject({
@@ -562,16 +337,16 @@ F8PbnGy0AHB7MhgwMbRvI0MBZhpIA7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j
     });
 
     it('should update challenge for same DID', async () => {
-      const challengeEvent: Partial<APIGatewayProxyEvent> = {
+      const challengeEvent = createEvent({
         path: '/auth/challenge',
         httpMethod: 'POST',
         body: JSON.stringify({ did: validDid }),
-      };
+      });
 
-      await challengeHandler(challengeEvent as APIGatewayProxyEvent);
+      await challengeHandler(challengeEvent);
       const firstItem = dynamoDBState.challenges.get(validDid);
 
-      await challengeHandler(challengeEvent as APIGatewayProxyEvent);
+      await challengeHandler(challengeEvent);
       const secondItem = dynamoDBState.challenges.get(validDid);
 
       expect((firstItem as Record<string, unknown>).challenge).not.toBe(
@@ -583,13 +358,13 @@ F8PbnGy0AHB7MhgwMbRvI0MBZhpIA7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j
   describe('Token state management', () => {
     it('should store refresh token with correct structure', async () => {
       // Generate challenge
-      const challengeEvent: Partial<APIGatewayProxyEvent> = {
+      const challengeEvent = createEvent({
         path: '/auth/challenge',
         httpMethod: 'POST',
         body: JSON.stringify({ did: validDid }),
-      };
+      });
 
-      const challengeResult = await challengeHandler(challengeEvent as APIGatewayProxyEvent);
+      const challengeResult = await challengeHandler(challengeEvent);
       const challengeBody = JSON.parse(challengeResult.body);
 
       // Setup agent
@@ -603,7 +378,7 @@ F8PbnGy0AHB7MhgwMbRvI0MBZhpIA7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j
         registeredAt: new Date().toISOString(),
       });
 
-      const tokenEvent: Partial<APIGatewayProxyEvent> = {
+      const tokenEvent = createEvent({
         path: '/auth/token',
         httpMethod: 'POST',
         body: JSON.stringify({
@@ -611,9 +386,9 @@ F8PbnGy0AHB7MhgwMbRvI0MBZhpIA7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j
           challenge: challengeBody.challenge,
           signature: 'valid-signature',
         }),
-      };
+      });
 
-      await tokenHandler(tokenEvent as APIGatewayProxyEvent);
+      await tokenHandler(tokenEvent);
 
       // Check that refresh token was stored
       const tokens = Array.from(dynamoDBState.refreshTokens.values());
@@ -629,16 +404,16 @@ F8PbnGy0AHB7MhgwMbRvI0MBZhpIA7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j
 
   describe('Revoke state management', () => {
     it('should add JTI to blacklist on revoke', async () => {
-      const revokeEvent: Partial<APIGatewayProxyEvent> = {
+      const revokeEvent = createEvent({
         path: '/auth/revoke',
         httpMethod: 'POST',
         headers: {
           Authorization: 'Bearer valid-jwt-token',
         },
         body: JSON.stringify({}),
-      };
+      });
 
-      const revokeResult = await revokeHandler(revokeEvent as APIGatewayProxyEvent);
+      const revokeResult = await revokeHandler(revokeEvent);
       expect(revokeResult.statusCode).toBe(200);
 
       // Verify JTI was added to blacklist
@@ -660,16 +435,16 @@ F8PbnGy0AHB7MhgwMbRvI0MBZhpIA7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j
         isRevoked: false,
       });
 
-      const revokeEvent: Partial<APIGatewayProxyEvent> = {
+      const revokeEvent = createEvent({
         path: '/auth/revoke',
         httpMethod: 'POST',
         headers: {
           Authorization: 'Bearer valid-jwt-token',
         },
         body: JSON.stringify({ refresh_token: refreshToken }),
-      };
+      });
 
-      const revokeResult = await revokeHandler(revokeEvent as APIGatewayProxyEvent);
+      const revokeResult = await revokeHandler(revokeEvent);
       expect(revokeResult.statusCode).toBe(200);
 
       // Verify refresh token was deleted
@@ -681,13 +456,13 @@ F8PbnGy0AHB7MhgwMbRvI0MBZhpIA7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j
     it('should handle DynamoDB errors in challenge handler', async () => {
       mockSend.mockRejectedValueOnce(new Error('DynamoDB Error'));
 
-      const challengeEvent: Partial<APIGatewayProxyEvent> = {
+      const challengeEvent = createEvent({
         path: '/auth/challenge',
         httpMethod: 'POST',
         body: JSON.stringify({ did: validDid }),
-      };
+      });
 
-      const result = await challengeHandler(challengeEvent as APIGatewayProxyEvent);
+      const result = await challengeHandler(challengeEvent);
       expect(result.statusCode).toBe(500);
       const body = JSON.parse(result.body);
       expect(body.code).toBe('INTERNAL_ERROR');
@@ -713,7 +488,7 @@ F8PbnGy0AHB7MhgwMbRvI0MBZhpIA7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j
 
       mockSend.mockRejectedValueOnce(new Error('DynamoDB Error'));
 
-      const tokenEvent: Partial<APIGatewayProxyEvent> = {
+      const tokenEvent = createEvent({
         path: '/auth/token',
         httpMethod: 'POST',
         body: JSON.stringify({
@@ -721,9 +496,9 @@ F8PbnGy0AHB7MhgwMbRvI0MBZhpIA7UL6gC8NL1E9j9j9j9j9j9j9j9j9j9j9j9j
           challenge: 'test-challenge',
           signature: 'valid-signature',
         }),
-      };
+      });
 
-      const result = await tokenHandler(tokenEvent as APIGatewayProxyEvent);
+      const result = await tokenHandler(tokenEvent);
       expect(result.statusCode).toBe(500);
       const body = JSON.parse(result.body);
       expect(body.code).toBe('INTERNAL_ERROR');

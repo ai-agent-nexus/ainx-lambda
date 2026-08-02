@@ -41,7 +41,7 @@ export default [
     },
   },
   {
-    files: ['**/*.test.ts', '**/*.test.tsx', '**/*.spec.ts', '**/*.spec.tsx', '__tests__/e2e/utils/**/*.ts'],
+    files: ['**/*.test.ts', '**/*.test.tsx', '**/*.spec.ts', '**/*.spec.tsx', '__tests__/e2e/utils/**/*.ts', '__tests__/integration/utils/**/*.ts'],
     languageOptions: {
       parser: tsParser,
       parserOptions: {
