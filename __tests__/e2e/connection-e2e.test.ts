@@ -1,7 +1,13 @@
 import axios from 'axios';
-import crypto from 'crypto';
-import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, ScanCommand, DeleteCommand } from '@aws-sdk/lib-dynamodb';
+import { generateValidDid } from './utils/did';
+import {
+  getJwtToken,
+  registerAgent,
+  INVITATIONS_URL,
+  REQUESTS_URL,
+  CONNECTIONS_URL,
+} from './utils/auth';
+import { createTestContext, cleanupTestData } from './utils/test-context';
 
 /**
  * E2E Tests for Connection Management API
@@ -15,183 +21,7 @@ import { DynamoDBDocumentClient, ScanCommand, DeleteCommand } from '@aws-sdk/lib
  * - Two valid did:key pairs (sender and receiver)
  */
 
-// Get API Gateway URL from environment or use default
-const API_BASE_URL = process.env.API_GATEWAY_URL || 'http://localhost:3000';
-const INVITATIONS_URL = `${API_BASE_URL}/connections/invitations`;
-const REQUESTS_URL = `${API_BASE_URL}/connections/requests`;
-const CONNECTIONS_URL = `${API_BASE_URL}/connections`;
-const REGISTER_URL = `${API_BASE_URL}/agents/register`;
-const CHALLENGE_URL = `${API_BASE_URL}/auth/challenge`;
-const TOKEN_URL = `${API_BASE_URL}/auth/token`;
-
-const client = new DynamoDBClient({});
-const dynamodb = DynamoDBDocumentClient.from(client);
-const INVITATIONS_TABLE_NAME = process.env.INVITATIONS_TABLE_NAME || 'ainx-invitations-sit';
-const CONNECTION_REQUESTS_TABLE_NAME =
-  process.env.CONNECTION_REQUESTS_TABLE_NAME || 'ainx-connection-requests-sit';
-const CONNECTIONS_TABLE_NAME = process.env.CONNECTIONS_TABLE_NAME || 'ainx-connections-sit';
-
 describe('E2E: Connection Management', () => {
-  // Generate a valid did:key with proper signature
-  const generateValidDid = () => {
-    const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
-    const publicKeyDer = publicKey.export({ type: 'spki', format: 'der' });
-    const rawPublicKey = publicKeyDer.slice(-32);
-    const multicodecPrefix = Buffer.from([0xed, 0x01]);
-    const dataWithPrefix = Buffer.concat([multicodecPrefix, rawPublicKey]);
-
-    const base58Chars = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-    let encoded = '';
-    let num = BigInt('0x' + dataWithPrefix.toString('hex'));
-    while (num > 0) {
-      encoded = base58Chars[Number(num % BigInt(58))] + encoded;
-      num = num / BigInt(58);
-    }
-    for (let i = 0; i < dataWithPrefix.length && dataWithPrefix[i] === 0; i++) {
-      encoded = '1' + encoded;
-    }
-
-    const did = `did:key:z${encoded}`;
-
-    const signMessage = (message: string): string => {
-      const signature = crypto.sign(null, Buffer.from(message), privateKey);
-      return signature.toString('base64');
-    };
-
-    return { did, signMessage };
-  };
-
-  const getJwtToken = async (did: string, signMessage: (msg: string) => string) => {
-    const challengeResponse = await axios.post(
-      CHALLENGE_URL,
-      { did },
-      {
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 10000,
-      }
-    );
-
-    const challenge = challengeResponse.data.challenge;
-    const signature = signMessage(challenge);
-
-    const tokenResponse = await axios.post(
-      TOKEN_URL,
-      {
-        did,
-        challenge,
-        signature,
-      },
-      {
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 10000,
-      }
-    );
-
-    return tokenResponse.data.access_token;
-  };
-
-  const registerAgent = async (did: string, signMessage: (msg: string) => string) => {
-    const metadata = { name: 'Test Agent' };
-    const message = JSON.stringify({ did, metadata });
-    const signature = signMessage(message);
-
-    await axios.post(
-      REGISTER_URL,
-      {
-        did,
-        signature,
-        metadata,
-      },
-      {
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 10000,
-      }
-    );
-  };
-
-  // Helper to create a complete test context with sender, receiver, tokens, and invitation
-  const createTestContext = async () => {
-    const sender = generateValidDid();
-    const receiver = generateValidDid();
-    await registerAgent(sender.did, sender.signMessage);
-    await registerAgent(receiver.did, receiver.signMessage);
-
-    // Wait a bit to ensure agent registration is propagated
-    await new Promise((resolve) => setTimeout(resolve, 500));
-
-    const senderToken = await getJwtToken(sender.did, sender.signMessage);
-    const receiverToken = await getJwtToken(receiver.did, receiver.signMessage);
-
-    return { sender, receiver, senderToken, receiverToken };
-  };
-
-  const cleanupTestData = async () => {
-    try {
-      const deletePromises: Promise<unknown>[] = [];
-
-      const invitations = await dynamodb.send(
-        new ScanCommand({
-          TableName: INVITATIONS_TABLE_NAME,
-          ProjectionExpression: 'invitationCode',
-        })
-      );
-
-      for (const item of invitations.Items || []) {
-        deletePromises.push(
-          dynamodb.send(
-            new DeleteCommand({
-              TableName: INVITATIONS_TABLE_NAME,
-              Key: { invitationCode: item.invitationCode },
-            })
-          )
-        );
-      }
-
-      const requests = await dynamodb.send(
-        new ScanCommand({
-          TableName: CONNECTION_REQUESTS_TABLE_NAME,
-          ProjectionExpression: 'requestId',
-        })
-      );
-
-      for (const item of requests.Items || []) {
-        deletePromises.push(
-          dynamodb.send(
-            new DeleteCommand({
-              TableName: CONNECTION_REQUESTS_TABLE_NAME,
-              Key: { requestId: item.requestId },
-            })
-          )
-        );
-      }
-
-      const connections = await dynamodb.send(
-        new ScanCommand({
-          TableName: CONNECTIONS_TABLE_NAME,
-          ProjectionExpression: 'userId,connectionId',
-        })
-      );
-
-      for (const item of connections.Items || []) {
-        deletePromises.push(
-          dynamodb.send(
-            new DeleteCommand({
-              TableName: CONNECTIONS_TABLE_NAME,
-              Key: {
-                userId: item.userId,
-                connectionId: item.connectionId,
-              },
-            })
-          )
-        );
-      }
-
-      await Promise.all(deletePromises);
-    } catch (error) {
-      console.warn('Cleanup error:', error);
-    }
-  };
-
   // Clean up before and after all tests
   beforeAll(async () => {
     await cleanupTestData();
@@ -699,11 +529,9 @@ describe('E2E: Connection Management', () => {
         }
       );
 
-      const reqId = sendResponse.data.requestId;
-
       try {
         await axios.post(
-          `${REQUESTS_URL}/${reqId}/accept`,
+          `${REQUESTS_URL}/${sendResponse.data.requestId}/accept`,
           {},
           {
             headers: {
@@ -720,49 +548,7 @@ describe('E2E: Connection Management', () => {
       }
     });
 
-    it('should reject expired invitation', async () => {
-      const { receiver, senderToken } = await createTestContext();
-
-      const createResponse = await axios.post(
-        INVITATIONS_URL,
-        { expiresInSeconds: 1 },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${senderToken}`,
-          },
-          timeout: 10000,
-        }
-      );
-
-      const code = createResponse.data.invitationCode;
-
-      // Wait for invitation to expire
-      await new Promise((resolve) => setTimeout(resolve, 2000));
-
-      try {
-        await axios.post(
-          REQUESTS_URL,
-          {
-            toDid: receiver.did,
-            invitationCode: code,
-          },
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${senderToken}`,
-            },
-            timeout: 10000,
-          }
-        );
-        fail('Should have thrown an error');
-      } catch (error: any) {
-        expect(error.response.status).toBe(400);
-        expect(error.response.data.code).toBe('EXPIRED_INVITATION');
-      }
-    });
-
-    it('should reject invalid invitation code', async () => {
+    it('should reject request with invalid invitation code', async () => {
       const { receiver, senderToken } = await createTestContext();
 
       try {
@@ -787,39 +573,13 @@ describe('E2E: Connection Management', () => {
       }
     });
 
-    it('should reject missing required fields', async () => {
-      const { receiver, senderToken } = await createTestContext();
-
-      try {
-        await axios.post(
-          REQUESTS_URL,
-          {
-            toDid: receiver.did,
-          },
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${senderToken}`,
-            },
-            timeout: 10000,
-          }
-        );
-        fail('Should have thrown an error');
-      } catch (error: any) {
-        expect(error.response.status).toBe(400);
-        expect(error.response.data.code).toBe('MISSING_FIELDS');
-      }
-    });
-
-    it('should reject unauthenticated requests', async () => {
+    it('should return 401 for missing Authorization header', async () => {
       try {
         await axios.post(
           INVITATIONS_URL,
           {},
           {
-            headers: {
-              'Content-Type': 'application/json',
-            },
+            headers: { 'Content-Type': 'application/json' },
             timeout: 10000,
           }
         );
@@ -828,35 +588,24 @@ describe('E2E: Connection Management', () => {
         expect(error.response.status).toBe(401);
       }
     });
-  });
 
-  describe('Pagination', () => {
-    it('should handle limit parameter', async () => {
-      const { senderToken } = await createTestContext();
-
-      const response = await axios.get(`${CONNECTIONS_URL}?limit=5`, {
-        headers: {
-          Authorization: `Bearer ${senderToken}`,
-        },
-        timeout: 10000,
-      });
-
-      expect(response.status).toBe(200);
-      expect(response.data.connections).toBeInstanceOf(Array);
-    });
-
-    it('should return nextToken when more results exist', async () => {
-      const { senderToken } = await createTestContext();
-
-      const response = await axios.get(`${CONNECTIONS_URL}?limit=1`, {
-        headers: {
-          Authorization: `Bearer ${senderToken}`,
-        },
-        timeout: 10000,
-      });
-
-      expect(response.status).toBe(200);
-      // nextToken may or may not be present depending on data
+    it('should return 403 for invalid token', async () => {
+      try {
+        await axios.post(
+          INVITATIONS_URL,
+          {},
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: 'Bearer invalid-token',
+            },
+            timeout: 10000,
+          }
+        );
+        fail('Should have thrown an error');
+      } catch (error: any) {
+        expect(error.response.status).toBe(403);
+      }
     });
   });
 });

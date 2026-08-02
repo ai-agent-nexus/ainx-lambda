@@ -1,5 +1,13 @@
 import axios from 'axios';
-import crypto from 'crypto';
+import { generateValidDid } from './utils/did';
+import {
+  getTokenPair,
+  registerAgent,
+  CHALLENGE_URL,
+  TOKEN_URL,
+  REFRESH_URL,
+  REVOKE_URL,
+} from './utils/auth';
 
 /**
  * E2E Tests for Authentication API
@@ -12,116 +20,13 @@ import crypto from 'crypto';
  * - AWS credentials for the test environment
  */
 
-// Get API Gateway URL from environment or use default
-const API_BASE_URL = process.env.API_GATEWAY_URL || 'http://localhost:3000';
-const CHALLENGE_URL = `${API_BASE_URL}/auth/challenge`;
-const TOKEN_URL = `${API_BASE_URL}/auth/token`;
-const REFRESH_URL = `${API_BASE_URL}/auth/refresh`;
-const REVOKE_URL = `${API_BASE_URL}/auth/revoke`;
-const REGISTER_URL = `${API_BASE_URL}/agents/register`;
-
 describe('E2E: Authentication Flow', () => {
-  // Generate a valid did:key with proper signature
-  const generateValidDid = () => {
-    const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
-    const publicKeyDer = publicKey.export({ type: 'spki', format: 'der' });
-    const rawPublicKey = publicKeyDer.slice(-32);
-    const multicodecPrefix = Buffer.from([0xed, 0x01]);
-    const dataWithPrefix = Buffer.concat([multicodecPrefix, rawPublicKey]);
-
-    const base58Chars = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-    let encoded = '';
-    let num = BigInt('0x' + dataWithPrefix.toString('hex'));
-    while (num > 0) {
-      encoded = base58Chars[Number(num % BigInt(58))] + encoded;
-      num = num / BigInt(58);
-    }
-    for (let i = 0; i < dataWithPrefix.length && dataWithPrefix[i] === 0; i++) {
-      encoded = '1' + encoded;
-    }
-
-    const did = `did:key:z${encoded}`;
-
-    const signMessage = (message: string): string => {
-      const signature = crypto.sign(null, Buffer.from(message), privateKey);
-      return signature.toString('base64');
-    };
-
-    return { did, signMessage };
-  };
-
-  const registerDid = async (did: string, signMessage: (msg: string) => string) => {
-    const metadata = { name: 'Test Agent' };
-    const message = JSON.stringify({ did, metadata });
-    const signature = signMessage(message);
-
-    try {
-      await axios.post(
-        REGISTER_URL,
-        {
-          did,
-          signature,
-          metadata,
-        },
-        {
-          headers: { 'Content-Type': 'application/json' },
-          timeout: 10000,
-        }
-      );
-    } catch (error) {
-      if (axios.isAxiosError(error) && error.response) {
-        console.error('registerDid failed:', {
-          status: error.response.status,
-          data: error.response.data,
-        });
-      }
-      throw error;
-    }
-  };
-
-  const getTokenPair = async (did: string, signMessage: (msg: string) => string) => {
-    // Step 1: Get challenge
-    const challengeResponse = await axios.post(
-      CHALLENGE_URL,
-      { did },
-      {
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 10000,
-      }
-    );
-
-    const challenge = challengeResponse.data.challenge;
-
-    // Step 2: Sign challenge
-    const signature = signMessage(challenge);
-
-    // Step 3: Get token
-    const tokenResponse = await axios.post(
-      TOKEN_URL,
-      {
-        did,
-        challenge,
-        signature,
-      },
-      {
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 10000,
-      }
-    );
-
-    return {
-      accessToken: tokenResponse.data.access_token,
-      refreshToken: tokenResponse.data.refresh_token,
-      expiresIn: tokenResponse.data.expires_in,
-    };
-  };
-
   describe('Happy Path: Complete Auth Flow', () => {
     it('should complete full authentication flow', async () => {
       const { did, signMessage } = generateValidDid();
 
       // Register the DID first
-      await registerDid(did, signMessage);
+      await registerAgent(did, signMessage);
 
       // Get token pair
       const { accessToken, refreshToken, expiresIn } = await getTokenPair(did, signMessage);
@@ -142,7 +47,7 @@ describe('E2E: Authentication Flow', () => {
     it('should refresh access token with refresh token', async () => {
       const { did, signMessage } = generateValidDid();
 
-      await registerDid(did, signMessage);
+      await registerAgent(did, signMessage);
 
       const { refreshToken } = await getTokenPair(did, signMessage);
 
@@ -165,7 +70,7 @@ describe('E2E: Authentication Flow', () => {
     it('should revoke token successfully', async () => {
       const { did, signMessage } = generateValidDid();
 
-      await registerDid(did, signMessage);
+      await registerAgent(did, signMessage);
 
       const { accessToken, refreshToken } = await getTokenPair(did, signMessage);
 
@@ -189,7 +94,7 @@ describe('E2E: Authentication Flow', () => {
     it('should revoke without refresh token', async () => {
       const { did, signMessage } = generateValidDid();
 
-      await registerDid(did, signMessage);
+      await registerAgent(did, signMessage);
 
       const { accessToken } = await getTokenPair(did, signMessage);
 
@@ -296,7 +201,7 @@ describe('E2E: Authentication Flow', () => {
     it('should successfully generate token pair for valid DID', async () => {
       const { did, signMessage } = generateValidDid();
 
-      await registerDid(did, signMessage);
+      await registerAgent(did, signMessage);
 
       const { accessToken, refreshToken, expiresIn } = await getTokenPair(did, signMessage);
 
@@ -549,7 +454,7 @@ describe('E2E: Authentication Flow', () => {
     it('should handle large request body in token request', async () => {
       const { did, signMessage } = generateValidDid();
 
-      await registerDid(did, signMessage);
+      await registerAgent(did, signMessage);
 
       const challengeResponse = await axios.post(
         CHALLENGE_URL,

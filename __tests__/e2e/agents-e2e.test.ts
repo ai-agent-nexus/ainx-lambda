@@ -1,5 +1,7 @@
 import axios from 'axios';
 import crypto from 'crypto';
+import { generateValidDid } from './utils/did';
+import { getJwtToken, REGISTER_URL, ROTATE_KEY_URL, REVOKE_URL } from './utils/auth';
 
 /**
  * E2E Tests for Agent Management API
@@ -12,77 +14,7 @@ import crypto from 'crypto';
  * - AWS credentials for the test environment
  */
 
-// Get API Gateway URL from environment or use default
-const API_BASE_URL = process.env.API_GATEWAY_URL || 'http://localhost:3000';
-const REGISTER_URL = `${API_BASE_URL}/agents/register`;
-const ROTATE_KEY_URL = `${API_BASE_URL}/agents/rotate-key`;
-const REVOKE_URL = `${API_BASE_URL}/agents`;
-const CHALLENGE_URL = `${API_BASE_URL}/auth/challenge`;
-const TOKEN_URL = `${API_BASE_URL}/auth/token`;
-
 describe('E2E: Agent Management', () => {
-  // Generate a valid did:key with proper signature
-  const generateValidDid = () => {
-    const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
-    const publicKeyDer = publicKey.export({ type: 'spki', format: 'der' });
-    const rawPublicKey = publicKeyDer.slice(-32);
-    const multicodecPrefix = Buffer.from([0xed, 0x01]);
-    const dataWithPrefix = Buffer.concat([multicodecPrefix, rawPublicKey]);
-
-    const base58Chars = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-    let encoded = '';
-    let num = BigInt('0x' + dataWithPrefix.toString('hex'));
-    while (num > 0) {
-      encoded = base58Chars[Number(num % BigInt(58))] + encoded;
-      num = num / BigInt(58);
-    }
-    for (let i = 0; i < dataWithPrefix.length && dataWithPrefix[i] === 0; i++) {
-      encoded = '1' + encoded;
-    }
-
-    const did = `did:key:z${encoded}`;
-
-    const signMessage = (message: string): string => {
-      const signature = crypto.sign(null, Buffer.from(message), privateKey);
-      return signature.toString('base64');
-    };
-
-    return { did, signMessage };
-  };
-
-  const getJwtToken = async (did: string, signMessage: (msg: string) => string) => {
-    // Step 1: Get challenge
-    const challengeResponse = await axios.post(
-      CHALLENGE_URL,
-      { did },
-      {
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 10000,
-      }
-    );
-
-    const challenge = challengeResponse.data.challenge;
-
-    // Step 2: Sign challenge
-    const signature = signMessage(challenge);
-
-    // Step 3: Get token
-    const tokenResponse = await axios.post(
-      TOKEN_URL,
-      {
-        did,
-        challenge,
-        signature,
-      },
-      {
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 10000,
-      }
-    );
-
-    return tokenResponse.data.access_token;
-  };
-
   describe('Happy Path: Agent Registration', () => {
     it('should successfully register a new agent with valid did:key', async () => {
       const { did, signMessage } = generateValidDid();
