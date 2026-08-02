@@ -11,7 +11,7 @@
     "build": "npm run build --workspaces",
     "test": "jest",
     "test:coverage": "jest --coverage",
-    "test:integration": "jest --testPathIgnorePatterns=/node_modules/ --testPathPatterns=integration",
+    "test:integration": "jest --testPathIgnorePatterns=/node_modules/ --testPathPatterns=__tests__/integration",
     "lint": "eslint . --ext .ts,.js",
     "lint:fix": "eslint . --ext .ts,.js --fix",
     "format": "prettier --write \"**/*.{ts,js,json,md}\"",
