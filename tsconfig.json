@@ -20,8 +20,7 @@
   "include": [
     "packages/**/*.ts",
     "functions/**/*.ts",
-    "jest.config.js",
-    "__tests__/e2e/utils/**/*.ts"
+    "jest.config.js"
   ],
   "exclude": ["node_modules", "dist", "**/*.test.ts", "**/__tests__/**"]
 }
